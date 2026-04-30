@@ -1,0 +1,243 @@
+/* ── Variables ─────────────────────────────────────── */
+:root {
+  --bg: #0f0f0f;
+  /* --bg: #1b140f; */
+  --card: #1a1a1a;
+  --border: #2a2a2a;
+  /* --accent: #c9a84c;      /* Gold chess color */
+  /*--accent2: #e8c97a; */
+  /* --accent: #e53935;   /* Main Red */
+  /*--accent2: #ff6b6b;   */
+
+--accent: #f97316;   /* Naruto orange */
+--accent2: #fb923c;  /* lighter orange */
+
+
+  --text: #f0f0f0;
+  --muted: #888;
+  --error: #ff6b6b;
+  --input-bg: #111;
+}
+
+/* ── Background ────────────────────────────────────── */
+.auth-bg {
+  min-height: 100vh;
+  background: var(--bg);
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(201, 168, 76, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(201, 168, 76, 0.04) 0%, transparent 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Georgia', serif;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── Floating chess pieces ─────────────────────────── */
+.auth-pieces {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.auth-pieces span {
+  position: absolute;
+  font-size: 3rem;
+  opacity: 0.04;
+  animation: floatPiece 12s infinite ease-in-out;
+  color: var(--accent);
+}
+
+.auth-pieces span:nth-child(1) { top: 10%; left: 5%;  animation-delay: 0s;   font-size: 4rem; }
+.auth-pieces span:nth-child(2) { top: 70%; left: 3%;  animation-delay: 2s;   font-size: 2.5rem; }
+.auth-pieces span:nth-child(3) { top: 20%; right: 6%; animation-delay: 4s;   font-size: 3.5rem; }
+.auth-pieces span:nth-child(4) { top: 60%; right: 4%; animation-delay: 1s;   font-size: 2rem; }
+.auth-pieces span:nth-child(5) { top: 85%; left: 20%; animation-delay: 3s;   font-size: 3rem; }
+.auth-pieces span:nth-child(6) { top: 5%;  left: 45%; animation-delay: 5s;   font-size: 2.5rem; }
+
+@keyframes floatPiece {
+  0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.04; }
+  50%       { transform: translateY(-20px) rotate(5deg); opacity: 0.08; }
+}
+
+/* ── Card ──────────────────────────────────────────── */
+.auth-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow:
+    0 0 0 1px rgba(201, 168, 76, 0.1),
+    0 24px 60px rgba(0, 0, 0, 0.6);
+  animation: cardIn 0.4s ease;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Logo ──────────────────────────────────────────── */
+.auth-logo {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.auth-logo-icon {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 12px rgba(201, 168, 76, 0.5));
+}
+
+.auth-logo h1 {
+  font-size: 1.8rem;
+  color: var(--accent);
+  margin: 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.auth-logo p {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 4px 0 0;
+  letter-spacing: 1px;
+}
+
+/* ── Tabs ──────────────────────────────────────────── */
+.auth-tabs {
+  display: flex;
+  background: #111;
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+}
+
+.auth-tabs button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-family: 'Georgia', serif;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.auth-tabs button.active {
+  background: var(--accent);
+  color: #000;
+  font-weight: bold;
+}
+
+/* ── Form ──────────────────────────────────────────── */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field label {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.auth-field input {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 15px;
+  font-family: 'Georgia', serif;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.auth-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(201, 168, 76, 0.12);
+}
+
+.auth-field input::placeholder {
+  color: #444;
+}
+
+/* ── Error ─────────────────────────────────────────── */
+.auth-error {
+  color: var(--error);
+  font-size: 13px;
+  text-align: center;
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+/* ── Submit Button ─────────────────────────────────── */
+.auth-submit {
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 15px;
+  font-family: 'Georgia', serif;
+  font-weight: bold;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: all 0.2s;
+  margin-top: 4px;
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: var(--accent2);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(201, 168, 76, 0.3);
+}
+
+.auth-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Switch ────────────────────────────────────────── */
+.auth-switch {
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 20px;
+  margin-bottom: 0;
+}
+
+.auth-switch span {
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-switch span:hover {
+  color: var(--accent2);
+}

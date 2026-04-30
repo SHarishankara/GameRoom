@@ -1,0 +1,72 @@
+.page-container {
+  width: 100%;
+  max-width: 500px;
+  margin: 20px auto;
+  padding: 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fafafa;
+  font-family: Arial, sans-serif;
+}
+
+/* Search bar */
+.search-bar {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #aaa;
+  border-radius: 6px;
+  margin-bottom: 15px;
+}
+
+/* Buttons row */
+.button-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.filter-btn {
+  flex: 1;
+  margin: 0 5px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #1e3a8a;
+  background: white;
+  color: #1e3a8a;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.filter-btn:hover {
+  background: #1e3a8a;
+  color: white;
+}
+
+/* Game list */
+.game-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Game card */
+.game-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.game-name {
+  font-weight: bold;
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+
+.game-info {
+  font-size: 14px;
+  color: #555;
+}

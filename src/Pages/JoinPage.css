@@ -1,0 +1,170 @@
+/* src/Pages/JoinPage.css */
+
+.join-bg {
+  min-height: 100vh;
+  background: #0f0f0f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Arial, sans-serif;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Floating chess pieces */
+.join-pieces {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.join-pieces span {
+  position: absolute;
+  font-size: 3rem;
+  opacity: 0.04;
+  color: #FF6B00;
+  animation: floatJoin 10s ease-in-out infinite;
+}
+
+.join-pieces span:nth-child(1) { top: 15%; left: 8%;  animation-delay: 0s; }
+.join-pieces span:nth-child(2) { top: 65%; left: 5%;  animation-delay: 2s; }
+.join-pieces span:nth-child(3) { top: 20%; right: 8%; animation-delay: 1s; }
+.join-pieces span:nth-child(4) { top: 70%; right: 6%; animation-delay: 3s; }
+
+@keyframes floatJoin {
+  0%, 100% { transform: translateY(0); opacity: 0.04; }
+  50%       { transform: translateY(-16px); opacity: 0.08; }
+}
+
+/* Card */
+.join-card {
+  background: #1a1a1a;
+  border: 1px solid #FF6B00;
+  border-radius: 16px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 0 40px rgba(255, 107, 0, 0.15);
+  animation: slideUp 0.4s ease;
+  position: relative;
+  z-index: 1;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Logo */
+.join-logo {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.join-logo-icon {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 10px rgba(255, 107, 0, 0.5));
+}
+
+.join-logo h1 {
+  font-size: 1.6rem;
+  color: #FF6B00;
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+.join-logo p {
+  color: #666;
+  font-size: 13px;
+  margin: 6px 0 0;
+}
+
+/* Code input — big, centered, like BGMI room code */
+.code-input {
+  width: 100%;
+  padding: 16px;
+  font-size: 28px;
+  font-weight: bold;
+  letter-spacing: 8px;
+  text-align: center;
+  background: #111;
+  border: 2px solid #333;
+  border-radius: 10px;
+  color: #FF6B00;
+  outline: none;
+  text-transform: uppercase;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.code-input:focus {
+  border-color: #FF6B00;
+  box-shadow: 0 0 0 3px rgba(255, 107, 0, 0.15);
+}
+
+.code-input::placeholder {
+  color: #333;
+  letter-spacing: 4px;
+  font-size: 20px;
+}
+
+/* Error */
+.join-error {
+  color: #ef4444;
+  font-size: 13px;
+  text-align: center;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+/* Join button */
+.join-btn {
+  width: 100%;
+  padding: 14px;
+  background: #FF6B00;
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.join-btn:hover:not(:disabled) {
+  background: #FF8C00;
+  box-shadow: 0 6px 20px rgba(255, 107, 0, 0.35);
+}
+
+.join-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Back button */
+.back-btn {
+  width: 100%;
+  padding: 11px;
+  background: transparent;
+  color: #666;
+  border: 1px solid #333;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.back-btn:hover {
+  border-color: #555;
+  color: #aaa;
+}
