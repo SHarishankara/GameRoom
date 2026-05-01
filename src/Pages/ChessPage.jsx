@@ -53,6 +53,7 @@ function ChessPage() {
   // myColorRef mirrors myColor as a ref so socket callbacks (which close over stale state)
   // can always read the current value without needing to be re-registered.
   const myColorRef = useRef(null);
+  const statusRef  = useRef("connecting");
 
   // joinedRef prevents emitting "join-room" twice if the component re-renders
   // or if connectSocket() triggers multiple "connect" events.
@@ -112,7 +113,7 @@ function ChessPage() {
   const joinRoom = useCallback(() => {
     if (joinedRef.current) return; // Guard: don't join twice
     joinedRef.current = true;
-    setStatus("waiting");
+    setStatus("waiting"); statusRef.current = "waiting";
     socket.emit("join-room", { roomId, username, userId, role: "player" });
   }, [roomId, username, userId]);
 
@@ -132,7 +133,7 @@ function ChessPage() {
     socket.on("room-joined", (data) => {
       myColorRef.current = data.color;
       setMyColor(data.color);
-      setStatus(data.status);
+      setStatus(data.status); statusRef.current = data.status;
       setPlayers(data.players || { white: null, black: null });
       setSpectatorCount(data.spectatorCount || 0);
       // Restore board to where it currently is (important for rejoin mid-game)
@@ -146,7 +147,7 @@ function ChessPage() {
     // ── player-joined ──────────────────────────────────────
     // Fired when the second player joins — game becomes "active".
     socket.on("player-joined", (data) => {
-      setStatus(data?.status || "active");
+      setStatus(data?.status || "active"); statusRef.current = data?.status || "active";
       if (data?.players) setPlayers(data.players);
     });
 
@@ -170,7 +171,7 @@ function ChessPage() {
     // Show a personalised end message depending on whether the
     // local player won, lost, drew, or was a spectator.
     socket.on("game-over", ({ winner, endReason }) => {
-      setStatus("finished");
+      setStatus("finished"); statusRef.current = "finished";
       const color = myColorRef.current; // use ref — state may be stale in callback
       setGameOverMsg(
         !color
@@ -272,8 +273,8 @@ function ChessPage() {
   // Prevents dragging opponent's pieces or pieces out of turn.
   // Spectators can never drag anything.
   function isPieceDraggable({ piece }) {
-    if (status !== "active" || !myColor) return false;
-    const mine = myColor === "white" ? "w" : "b";
+    if (statusRef.current !== "active" || !myColorRef.current) return false; // ✅ use refs — state is stale in callbacks
+    const mine = myColorRef.current === "white" ? "w" : "b";
     return piece[0] === mine && piece[0] === game.turn();
   }
 
