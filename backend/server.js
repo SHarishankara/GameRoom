@@ -28,7 +28,7 @@ const httpServer = http.createServer(app);
 // when deployed. Now we allow both the production frontend URL
 // (CLIENT_URL from .env) AND localhost for development.
 const allowedOrigins = [
-  process.env.CLIENT_URL,   // e.g. https://your-app.vercel.app (set in Render env vars)
+  "https://game-room-ashy.vercel.app",   // e.g. https://your-app.vercel.app (set in Render env vars)
   "http://localhost:5173",  // Vite dev server
   "http://localhost:3000",  // Create React App dev server (just in case)
 ].filter(Boolean); // Remove undefined if CLIENT_URL isn't set
@@ -58,6 +58,7 @@ const io = new Server(httpServer, {
 
 // ── Middleware ─────────────────────────────────────────────
 app.use(cors(corsOptions));   // Apply CORS to all REST routes
+app.options("*", cors(corsOptions));
 app.use(express.json());      // Parse JSON request bodies
 
 // ── Database ───────────────────────────────────────────────
