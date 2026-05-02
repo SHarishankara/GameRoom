@@ -1,13 +1,4 @@
 // src/Pages/ChessPage.jsx
-// ─────────────────────────────────────────────────────────────
-// The main chess game screen. Handles:
-//  - Joining a room via Socket.IO
-//  - Rendering the board with react-chessboard
-//  - Sending and receiving moves in real time
-//  - Showing game status, move history, and player info
-//  - Opening the Chat/Voice panel
-// ─────────────────────────────────────────────────────────────
-
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Chessboard } from "react-chessboard";
@@ -16,103 +7,160 @@ import "../styles/ChessPage.css";
 import { socket, connectSocket } from "../services/socket";
 import ChatVoicePanel from "../components/ChatVoicePanel";
 
-// ── Chess sounds using Web Audio API (no external files needed) ──
-// Generates move/capture/check sounds programmatically.
+// ── Chess sounds via Web Audio API (no files needed) ──────────
 function playSound(type) {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
+    osc.connect(gain); gain.connect(ctx.destination);
     if (type === "move") {
-      // Short clean click — like a piece placed on board
       osc.type = "sine";
       osc.frequency.setValueAtTime(520, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.08);
       gain.gain.setValueAtTime(0.18, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.12);
+      osc.start(); osc.stop(ctx.currentTime + 0.12);
     } else if (type === "capture") {
-      // Heavier thud — piece taken
       osc.type = "triangle";
       osc.frequency.setValueAtTime(300, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.18);
       gain.gain.setValueAtTime(0.28, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.22);
+      osc.start(); osc.stop(ctx.currentTime + 0.22);
     } else if (type === "check") {
-      // Two-tone alert — king is in check
       osc.type = "square";
       osc.frequency.setValueAtTime(660, ctx.currentTime);
       osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
       gain.gain.setValueAtTime(0.12, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.25);
+      osc.start(); osc.stop(ctx.currentTime + 0.25);
     } else if (type === "gameover") {
-      // Descending tone — game ended
       osc.type = "sine";
       osc.frequency.setValueAtTime(440, ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.5);
       gain.gain.setValueAtTime(0.2, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.5);
+      osc.start(); osc.stop(ctx.currentTime + 0.5);
+    } else if (type === "lowtime") {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+      osc.start(); osc.stop(ctx.currentTime + 0.1);
     }
-  } catch (e) { /* AudioContext blocked — silently ignore */ }
+  } catch (e) { /* AudioContext blocked — ignore silently */ }
 }
 
+// ── Format seconds → "MM:SS" ──────────────────────────────────
+function fmtTimer(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
 
+// ── Piece point values ─────────────────────────────────────────
+const PIECE_VALUES = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
+const PIECE_SYMBOLS = {
+  wP: "♙", wN: "♘", wB: "♗", wR: "♖", wQ: "♕",
+  bP: "♟", bN: "♞", bB: "♝", bR: "♜", bQ: "♛",
+};
+
+// ── Calculate captured pieces + material advantage from FEN ───
+function getCaptured(fen) {
+  const initial = { p:8, n:2, b:2, r:2, q:1 };
+  const board   = fen.split(" ")[0];
+  const counts  = { w:{}, b:{} };
+
+  for (const ch of board) {
+    if (ch === "/" || ch === " ") continue;
+    if (/\d/.test(ch)) continue;
+    const color = ch === ch.toUpperCase() ? "w" : "b";
+    const piece = ch.toLowerCase();
+    if (!counts[color][piece]) counts[color][piece] = 0;
+    counts[color][piece]++;
+  }
+
+  // Captured = initial count - remaining count
+  const captured = { white: {}, black: {} }; // white = pieces white captured (black pieces gone)
+  for (const piece of ["p","n","b","r","q"]) {
+    const wRemaining = counts.w[piece] || 0;
+    const bRemaining = counts.b[piece] || 0;
+    captured.black[piece] = Math.max(0, initial[piece] - wRemaining); // black pieces captured by white
+    captured.white[piece] = Math.max(0, initial[piece] - bRemaining); // white pieces captured by black
+  }
+
+  // Material score: positive = white ahead
+  let score = 0;
+  for (const piece of ["p","n","b","r","q"]) {
+    score += ((counts.w[piece] || 0) - (counts.b[piece] || 0)) * PIECE_VALUES[piece];
+  }
+
+  return { captured, score };
+}
+
+// ── Module-level chat history store ───────────────────────────
+// Persists across panel open/close since React state resets on unmount
+const _chatStore = {};
+function getChatHistory(roomId) {
+  if (!_chatStore[roomId]) _chatStore[roomId] = [];
+  return _chatStore[roomId];
+}
+function saveChatMsg(roomId, msg) {
+  if (!_chatStore[roomId]) _chatStore[roomId] = [];
+  const dup = _chatStore[roomId].some(m => m.username === msg.username && m.time === msg.time);
+  if (!dup) _chatStore[roomId].push(msg);
+}
+
+// ─────────────────────────────────────────────────────────────
+// ChessPage Component
+// ─────────────────────────────────────────────────────────────
 function ChessPage() {
   const navigate = useNavigate();
-  const { roomId } = useParams(); // Room code from the URL, e.g. /chess/A3F9B2
+  const { roomId } = useParams();
 
-  // Pull user identity from localStorage (saved at login)
   const user     = JSON.parse(localStorage.getItem("user") || "{}");
   const username = user.username || "Player";
   const userId   = user.id || username;
 
   // ── Chess state ───────────────────────────────────────────
-  const [game, setGame]                 = useState(new Chess());       // chess.js instance
-  const [boardTheme, setBoardTheme]     = useState("classic");         // colour theme name
-  const [squareStyles, setSquareStyles] = useState({});                // highlight squares
-  const [selectedSq, setSelectedSq]     = useState(null);              // click-to-move selected square
-  const [moveHistory, setMoveHistory]   = useState([]);                // list of SAN moves
-  const [error, setError]               = useState(null);              // inline error toast
+  const [game, setGame]               = useState(new Chess());
+  const [boardTheme, setBoardTheme]   = useState("classic");
+  const [squareStyles, setSquareStyles] = useState({});
+  const [selectedSq, setSelectedSq]   = useState(null);
+  const [moveHistory, setMoveHistory] = useState([]); // full SAN history
+  const [allFens, setAllFens]         = useState(["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]); // FEN after each move
+  const [viewIndex, setViewIndex]     = useState(-1); // -1 = live, N = reviewing move N
+  const [error, setError]             = useState(null);
 
-  // ── Room/player state ─────────────────────────────────────
-  const [myColor, setMyColor]               = useState(null);          // "white" | "black" | null (spectator)
-  const [status, setStatus]                 = useState("connecting");  // connecting/waiting/active/finished
-  const [players, setPlayers]               = useState({ white: null, black: null });
+  // ── Room state ────────────────────────────────────────────
+  const [myColor, setMyColor]         = useState(null);
+  const [status, setStatus]           = useState("connecting");
+  const [players, setPlayers]         = useState({ white: null, black: null });
   const [spectatorCount, setSpectatorCount] = useState(0);
-  const [gameOverMsg, setGameOverMsg]       = useState(null);          // end-of-game message
-  const [copied, setCopied]                 = useState(false);         // share-link copy feedback
-  const [codeCopied, setCodeCopied]         = useState(false);         // room-code copy feedback
+  const [gameOverMsg, setGameOverMsg] = useState(null);
+  const [isDisconnected, setIsDisconnected] = useState(false); // opponent disconnected
+  const [copied, setCopied]           = useState(false);
+  const [codeCopied, setCodeCopied]   = useState(false);
 
-  // ── Chat panel state ──────────────────────────────────────
+  // ── Timer state ───────────────────────────────────────────
+  const [timers, setTimers] = useState({ white: 600, black: 600 });
+
+  // ── Panel ─────────────────────────────────────────────────
   const [showPanel, setShowPanel]     = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0); // badge on the Chat button
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  // ── Board width — responsive ──────────────────────────────
-  // FIX: Previously used window.innerWidth - 420 which could go negative on small screens.
-  // Now we calculate based on available space after sidebar + panel.
-  const [boardWidth, setBoardWidth] = useState(480);
+  // ── Board width (responsive) ──────────────────────────────
+  const [boardWidth, setBoardWidth]   = useState(480);
 
-  // myColorRef mirrors myColor as a ref so socket callbacks (which close over stale state)
-  // can always read the current value without needing to be re-registered.
-  const myColorRef = useRef(null);
-
-  // joinedRef prevents emitting "join-room" twice if the component re-renders
-  // or if connectSocket() triggers multiple "connect" events.
-  const joinedRef = useRef(false);
+  // ── Refs ──────────────────────────────────────────────────
+  const myColorRef  = useRef(null);
+  const statusRef   = useRef("connecting"); // avoid stale closure in isPieceDraggable
+  const joinedRef   = useRef(false);        // prevent double join-room emit
+  const lowTimePlayed = useRef(false);      // play low-time sound only once per minute
 
   const shareLink = `${window.location.origin}/chess/${roomId}`;
 
-  // Board colour themes — passed to react-chessboard
   const themes = {
     classic:  { dark: "#769656", light: "#eeeed2" },
     midnight: { dark: "#4a4a6a", light: "#9b9bc4" },
@@ -121,114 +169,135 @@ function ChessPage() {
   };
 
   // ── Responsive board width ────────────────────────────────
-  // Recalculates whenever the panel opens/closes or window resizes.
-  // Ensures board is always between 280px (minimum) and 520px (maximum).
   useEffect(() => {
-    function updateBoardWidth() {
-      const sidebarW = window.innerWidth < 900 ? 0 : 220; // sidebar hidden on mobile
-      const panelW   = showPanel ? 340 : 0;               // chat panel width
-      const padding  = 80;                                 // breathing room
-      const available = window.innerWidth - sidebarW - panelW - padding;
-      setBoardWidth(Math.max(280, Math.min(520, available)));
+    function calc() {
+      const sw = window.innerWidth < 900 ? 0 : 220;
+      const pw = showPanel ? 340 : 0;
+      setBoardWidth(Math.max(280, Math.min(520, window.innerWidth - sw - pw - 80)));
     }
-    updateBoardWidth();
-    window.addEventListener("resize", updateBoardWidth);
-    return () => window.removeEventListener("resize", updateBoardWidth);
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
   }, [showPanel]);
 
-  // ── Clipboard helpers ─────────────────────────────────────
-  const copyLink = () => { navigator.clipboard.writeText(shareLink); setCopied(true);    setTimeout(() => setCopied(false), 2000); };
-  const copyCode = () => { navigator.clipboard.writeText(roomId);    setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); };
+  // ── Low time warning sound ────────────────────────────────
+  useEffect(() => {
+    if (!myColor || status !== "active") return;
+    const myTime = timers[myColor];
+    if (myTime === 60) { playSound("lowtime"); lowTimePlayed.current = true; }
+    if (myTime <= 10 && myTime > 0) playSound("lowtime");
+  }, [timers, myColor, status]);
 
-  // ── Unread message counter ────────────────────────────────
-  // Increments the badge on the Chat button when the panel is closed
-  // and a message arrives from someone else.
+  const copyLink = () => { navigator.clipboard.writeText(shareLink); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  const copyCode = () => { navigator.clipboard.writeText(roomId); setCodeCopied(true); setTimeout(() => setCodeCopied(false), 2000); };
+
+  // ── Unread badge ──────────────────────────────────────────
   useEffect(() => {
     const h = (msg) => {
+      saveChatMsg(roomId, msg); // ✅ always save — even when panel closed
       if (!showPanel && msg.username !== username) setUnreadCount(n => n + 1);
     };
     socket.on("chat-message", h);
     return () => socket.off("chat-message", h);
-  }, [showPanel, username]);
+  }, [showPanel, username, roomId]);
 
-  // Reset unread count when the panel is opened
   const handleTogglePanel = () => setShowPanel(prev => {
     if (!prev) setUnreadCount(0);
     return !prev;
   });
 
-  // ── joinRoom ──────────────────────────────────────────────
-  // Emits the "join-room" event to the server exactly once.
-  // useCallback so the same function reference is used in
-  // both the connect handler and the reconnect handler.
+  // ── Stable joinRoom ───────────────────────────────────────
   const joinRoom = useCallback(() => {
-    if (joinedRef.current) return; // Guard: don't join twice
+    if (joinedRef.current) return; // ✅ never emit twice
     joinedRef.current = true;
+    statusRef.current = "waiting";
     setStatus("waiting");
-    socket.emit("join-room", { roomId, username, userId, role: "player" });
+    socket.emit("join-room", { roomId }); // username/userId from JWT on server
   }, [roomId, username, userId]);
 
-  // ── Socket event wiring ───────────────────────────────────
-  // Registers all socket listeners once on mount.
-  // Cleans them up on unmount to avoid memory leaks / double-handling.
+  // ── Socket wiring ─────────────────────────────────────────
   useEffect(() => {
-    connectSocket(); // Connect if not already connected
-
-    // If already connected when this effect runs, join immediately.
-    // Otherwise wait for the "connect" event (socket.once = fires only once).
+    connectSocket();
     if (socket.connected) joinRoom();
-    else socket.once("connect", joinRoom);
+    else socket.once("connect", joinRoom); // ✅ .once not .on
 
-    // ── room-joined ────────────────────────────────────────
-    // Server confirms we joined and tells us our colour + current board state.
     socket.on("room-joined", (data) => {
       myColorRef.current = data.color;
       setMyColor(data.color);
+      statusRef.current = data.status;
       setStatus(data.status);
       setPlayers(data.players || { white: null, black: null });
       setSpectatorCount(data.spectatorCount || 0);
-      // Restore board to where it currently is (important for rejoin mid-game)
-      if (data.fen) {
-        const g = new Chess(data.fen);
-        setGame(g);
-        setMoveHistory(g.history());
+      if (data.timers) setTimers(data.timers);
+      setIsDisconnected(false);
+
+      // ✅ Restore full board history from server moves on rejoin
+      if (data.moves && data.moves.length > 0) {
+        const fens = [new Chess().fen()];
+        const history = [];
+        const g = new Chess();
+        for (const m of data.moves) {
+          try {
+            const result = g.move({ from: m.from, to: m.to, promotion: "q" });
+            if (result) { fens.push(g.fen()); history.push(result.san); }
+          } catch (e) { /* skip invalid */ }
+        }
+        setGame(new Chess(g.fen()));
+        setAllFens(fens);
+        setMoveHistory(history);
+        setViewIndex(-1); // live view
+      } else if (data.fen) {
+        setGame(new Chess(data.fen));
+        setAllFens([data.fen]);
+      }
+
+      // ✅ Restore chat history so notifications show on first open
+      if (data.chat && data.chat.length > 0) {
+        data.chat.forEach(msg => saveChatMsg(roomId, msg));
       }
     });
 
-    // ── player-joined ──────────────────────────────────────
-    // Fired when the second player joins — game becomes "active".
     socket.on("player-joined", (data) => {
+      statusRef.current = data?.status || "active";
       setStatus(data?.status || "active");
       if (data?.players) setPlayers(data.players);
+      if (data?.timers) setTimers(data.timers);
+      setIsDisconnected(false);
     });
 
-    // ── move-made ──────────────────────────────────────────
-    // Fired for BOTH players when any move is made.
-    // We rebuild the chess.js instance from the FEN so both
-    // boards are always in sync with the server's source of truth.
     socket.on("move-made", (data) => {
       const g = new Chess(data.fen);
       setGame(g);
       setMoveHistory(g.history());
-      // Highlight the from/to squares of the last move
+      setAllFens(prev => {
+        // Only append if this FEN is not already the last one
+        if (prev[prev.length - 1] === data.fen) return prev;
+        return [...prev, data.fen];
+      });
+      setViewIndex(-1); // snap back to live view
       setSquareStyles({
         [data.from]: { backgroundColor: "rgba(255,200,0,0.45)" },
         [data.to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
       });
+      setSelectedSq(null);
       setError(null);
-      // Play sound — check takes priority over capture over normal move
-      if (data.isCheck) playSound("check");
+      if (data.timers) setTimers(data.timers);
+
+      // Play appropriate sound
+      if (data.isCheck)        playSound("check");
       else if (data.isCapture) playSound("capture");
-      else playSound("move");
+      else                      playSound("move");
     });
 
-    // ── game-over ──────────────────────────────────────────
-    // Show a personalised end message depending on whether the
-    // local player won, lost, drew, or was a spectator.
+    socket.on("timer-tick", ({ timers }) => {
+      setTimers(timers);
+    });
+
     socket.on("game-over", ({ winner, endReason }) => {
+      statusRef.current = "finished";
       setStatus("finished");
-      const color = myColorRef.current; // use ref — state may be stale in callback
       playSound("gameover");
+      const color = myColorRef.current;
       setGameOverMsg(
         !color
           ? `${winner === "draw" ? "Draw 🤝" : winner + " wins 🏆"} — ${endReason}`
@@ -238,168 +307,180 @@ function ChessPage() {
       );
     });
 
-    // ── player-disconnected ────────────────────────────────
-    // Show a warning if the opponent disconnects mid-game.
-    // The room stays alive so they can rejoin.
+    // ✅ Opponent disconnected — show rejoin button for them
     socket.on("player-disconnected", ({ color }) => {
+      setIsDisconnected(true);
       setError(`⚠️ ${color} disconnected — waiting for rejoin…`);
     });
 
-    // ── error ──────────────────────────────────────────────
-    // Server-side errors (wrong turn, invalid move, etc.)
-    // Auto-clear after 3 seconds.
     socket.on("error", ({ message }) => {
       setError(message);
       setTimeout(() => setError(null), 3000);
     });
 
-    // ── reconnect guard ────────────────────────────────────
-    // If the socket drops and reconnects, reset the join guard
-    // and re-emit "join-room" so the server re-registers us.
-    const onReconnect = () => { joinedRef.current = false; joinRoom(); };
+    // ✅ On reconnect: reset guard and rejoin seamlessly
+    const onReconnect = () => {
+      joinedRef.current = false;
+      joinRoom();
+    };
     socket.on("connect", onReconnect);
 
-    // Cleanup: remove all listeners when component unmounts
     return () => {
-      socket.off("connect",             onReconnect);
+      socket.off("connect",            onReconnect);
       socket.off("room-joined");
       socket.off("player-joined");
       socket.off("move-made");
+      socket.off("timer-tick");
       socket.off("game-over");
       socket.off("player-disconnected");
       socket.off("error");
     };
-  }, [joinRoom]);
+  }, [joinRoom, roomId]);
 
-  // ── getLegalStyles — chess.com style dots ─────────────────
-  // Empty squares get a small filled dot; capture squares get
-  // a hollow ring around the existing piece (like chess.com).
-  function getLegalStyles(sq, currentGame) {
-    const g = currentGame || game;
-    const moves  = g.moves({ square: sq, verbose: true });
-    const styles = {
-      [sq]: { background: "rgba(255,200,0,0.5)", borderRadius: "4px" }, // source highlight
-    };
+  // ── Legal move highlighting (chess.com style dots) ────────
+  function getLegalStyles(sq) {
+    const moves  = game.moves({ square: sq, verbose: true });
+    const styles = { [sq]: { background: "rgba(255,200,0,0.5)", borderRadius: "4px" } };
     moves.forEach(m => {
-      const isCapture = !!g.get(m.to);
+      const isCapture = !!game.get(m.to);
       styles[m.to] = isCapture
-        // Capture: ring around the piece (hollow circle overlay)
         ? { background: "radial-gradient(circle, transparent 58%, rgba(0,0,0,0.35) 58%, rgba(0,0,0,0.35) 68%, transparent 68%)" }
-        // Empty: small filled dot in centre
-        : { background: "radial-gradient(circle, rgba(0,0,0,0.28) 26%, transparent 26%)" };
+        : { background: "radial-gradient(circle, rgba(0,0,0,0.25) 26%, transparent 26%)" };
     });
     return styles;
   }
 
-  // ── onDragBegin — show legal moves on drag start ──────────
+  // ── Drag: show legal dots ─────────────────────────────────
   function onDragBegin(piece, sq) {
     setSquareStyles(getLegalStyles(sq));
+    setSelectedSq(sq);
   }
 
-  // ── onSquareClick — click/touch to move ───────────────────
-  // First click selects a piece and highlights legal moves.
-  // Second click on a legal square executes the move.
-  // Clicking the same square or an illegal square deselects.
+  // ── Click/touch to move ───────────────────────────────────
   function onSquareClick(sq) {
+    // Can't interact in review mode or if not active
+    if (viewIndex !== -1) return;
     if (statusRef.current !== "active" || !myColorRef.current) return;
     const mine = myColorRef.current === "white" ? "w" : "b";
 
-    // If no square selected yet — try to select this square
     if (!selectedSq) {
       const piece = game.get(sq);
-      // Only select own piece on own turn
       if (!piece || piece.color !== mine || piece.color !== game.turn()) return;
       setSelectedSq(sq);
       setSquareStyles(getLegalStyles(sq));
       return;
     }
 
-    // A square is already selected — try to move to clicked square
     if (selectedSq === sq) {
-      // Clicked same square: deselect
-      setSelectedSq(null);
-      setSquareStyles({});
-      return;
+      setSelectedSq(null); setSquareStyles({}); return;
     }
 
-    // Check if clicked square is a legal destination
     const legalMoves = game.moves({ square: selectedSq, verbose: true });
-    const isLegal = legalMoves.some(m => m.to === sq);
+    const isLegal    = legalMoves.some(m => m.to === sq);
 
     if (isLegal) {
-      // Execute the move via existing onDrop logic
       onDrop(selectedSq, sq);
       setSelectedSq(null);
     } else {
-      // Maybe clicking another own piece — switch selection
       const piece = game.get(sq);
       if (piece && piece.color === mine && piece.color === game.turn()) {
         setSelectedSq(sq);
         setSquareStyles(getLegalStyles(sq));
       } else {
-        // Clicked empty/enemy non-legal square — deselect
-        setSelectedSq(null);
-        setSquareStyles({});
+        setSelectedSq(null); setSquareStyles({});
       }
     }
   }
 
-  // ── onDrop ────────────────────────────────────────────────
-  // Called when the player drops a piece on a target square.
-  // Validates the move locally with chess.js, then emits it
-  // to the server. If invalid, returns false (board snaps back).
+  // ── Drop (drag-drop move) ─────────────────────────────────
   function onDrop(from, to) {
-    // Can't move if the game isn't active
-    if (status !== "active") {
+    if (statusRef.current !== "active") {
       setError("⏳ Waiting for opponent…");
       setTimeout(() => setError(null), 2000);
       return false;
     }
-
+    // Don't allow moves while reviewing history
+    if (viewIndex !== -1) {
+      setError("⚠️ Exit review mode to make moves");
+      setTimeout(() => setError(null), 2000);
+      return false;
+    }
     let ok = false;
-
     setGame(prev => {
-      const g = new Chess(prev.fen()); // Clone current state
+      const g = new Chess(prev.fen());
       try {
-        if (g.move({ from, to, promotion: "q" })) { // Always promote to queen
+        const move = g.move({ from, to, promotion: "q" });
+        if (move) {
           ok = true;
-          setMoveHistory(g.history());
           setSquareStyles({
             [from]: { backgroundColor: "rgba(255,200,0,0.45)" },
             [to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
           });
-          // Tell the server about the move — it will broadcast to both players
-          socket.emit("move", { roomId, from, to, promotion: "q" });
+          socket.emit("move", { roomId, from, to, promotion: "q" }); // no username needed
         }
       } catch {
         setError("❌ Invalid move");
         setTimeout(() => setError(null), 2000);
       }
-      return ok ? g : prev; // Only update state if move was valid
+      return ok ? g : prev;
     });
-
-    return ok; // react-chessboard uses this to decide whether to animate
+    return ok;
   }
 
-  // ── isPieceDraggable ──────────────────────────────────────
-  // Prevents dragging opponent's pieces or pieces out of turn.
-  // Spectators can never drag anything.
+  // ── Draggable check ───────────────────────────────────────
   function isPieceDraggable({ piece }) {
-    if (status !== "active" || !myColor) return false;
-    const mine = myColor === "white" ? "w" : "b";
+    if (statusRef.current !== "active" || !myColorRef.current) return false;
+    if (viewIndex !== -1) return false; // no drag in review mode
+    const mine = myColorRef.current === "white" ? "w" : "b";
     return piece[0] === mine && piece[0] === game.turn();
   }
 
-  // ── handleResign ──────────────────────────────────────────
-  // Confirm then tell the server the player resigned.
+  // ── Resign ────────────────────────────────────────────────
   function handleResign() {
-    if (window.confirm("Resign this game?")) {
-      socket.emit("resign", { roomId, color: myColor });
-    }
+    if (window.confirm("Resign this game?"))
+      socket.emit("resign", { roomId }); // server derives color from socketId
   }
 
-  // ── getStatus ─────────────────────────────────────────────
-  // Returns { text, cls } for the status pill above the board.
+  // ── Rejoin (after disconnect) ─────────────────────────────
+  function handleRejoin() {
+    joinedRef.current = false;
+    joinRoom();
+    setIsDisconnected(false);
+    setError(null);
+  }
+
+  // ── Move browser ──────────────────────────────────────────
+  // viewIndex: -1 = live board, 0..N = review move N
+  function goToMove(idx) {
+    // idx = -1 means live
+    setViewIndex(idx);
+    setSquareStyles({});
+    setSelectedSq(null);
+  }
+
+  // The FEN to show on board (live or reviewed)
+  const displayFen = viewIndex === -1
+    ? game.fen()
+    : allFens[viewIndex + 1] || game.fen(); // allFens[0] = start, [1] = after move 1, etc.
+
+  // ── Captured pieces display ───────────────────────────────
+  const { captured, score } = getCaptured(game.fen());
+
+  // Render captured piece symbols for a color
+  function renderCaptured(color) {
+    // color = "white" means white captured black's pieces
+    const caps = captured[color];
+    const symbols = [];
+    for (const [piece, count] of Object.entries(caps)) {
+      const sym = color === "white"
+        ? PIECE_SYMBOLS["b" + piece.toUpperCase()]
+        : PIECE_SYMBOLS["w" + piece.toUpperCase()];
+      for (let i = 0; i < count; i++) symbols.push(sym);
+    }
+    return symbols;
+  }
+
+  // ── Status ────────────────────────────────────────────────
   function getStatus() {
     if (status === "connecting") return { text: "Connecting…",           cls: "s-wait"   };
     if (status === "waiting")    return { text: "Waiting for opponent…", cls: "s-wait"   };
@@ -411,34 +492,36 @@ function ChessPage() {
 
   const st          = getStatus();
   const isSpectator = !myColor && status !== "connecting" && status !== "waiting";
+  const isReviewing = viewIndex !== -1;
 
-  // Pair moves into rows: [{ n: 1, w: "e4", b: "e5" }, ...]
+  // Pair moves: [{n, w, b}]
   const movePairs = [];
   for (let i = 0; i < moveHistory.length; i += 2)
-    movePairs.push({ n: i / 2 + 1, w: moveHistory[i], b: moveHistory[i + 1] || "" });
+    movePairs.push({ n: i / 2 + 1, w: moveHistory[i], wIdx: i, b: moveHistory[i + 1] || "", bIdx: i + 1 });
+
+  // Timer color: red if < 30s
+  const timerCls = (color) => {
+    const t = timers[color];
+    if (t <= 30) return "cp-timer danger";
+    if (t <= 60) return "cp-timer warning";
+    return "cp-timer";
+  };
 
   return (
     <div className="cp-page">
 
-      {/* ═══════════════════════════════
-          SIDEBAR — players, move list, theme picker
-      ═══════════════════════════════ */}
+      {/* ═══════ SIDEBAR ═══════ */}
       <aside className="cp-sidebar">
 
-        {/* Player cards */}
+        {/* Players + captured pieces + timers */}
         <div className="cp-card">
           <p className="cp-card-label">PLAYERS</p>
 
-          {/* Render Black first (top of board), then White (bottom) */}
           {[
-            { color: "black", letter: "b", symbol: "♟" },
-            { color: "white", letter: "w", symbol: "♙" },
-          ].map(({ color, letter, symbol }) => (
-            <div
-              key={color}
-              // Highlight the row of whichever player's turn it is
-              className={`cp-player-row${game.turn() === letter && status === "active" ? " cp-my-turn" : ""}`}
-            >
+            { color: "black", letter: "b", symbol: "♟", capturedBy: "white" },
+            { color: "white", letter: "w", symbol: "♙", capturedBy: "black" },
+          ].map(({ color, letter, symbol, capturedBy }) => (
+            <div key={color} className={`cp-player-row${game.turn() === letter && status === "active" && !isReviewing ? " cp-my-turn" : ""}`}>
               <div className={`cp-avatar cp-av-${color}`}>
                 {(players[color]?.username || "?")[0].toUpperCase()}
               </div>
@@ -448,9 +531,23 @@ function ChessPage() {
                   {myColor === color && <span className="cp-you">YOU</span>}
                 </span>
                 <span className="cp-pcolor">{symbol} {color}</span>
+                {/* Captured pieces row — chess.com style */}
+                <span className="cp-captured">
+                  {renderCaptured(capturedBy).join(" ")}
+                  {/* Material advantage */}
+                  {(() => {
+                    const adv = capturedBy === "white" ? score : -score;
+                    return adv > 0 ? <span className="cp-adv">+{adv}</span> : null;
+                  })()}
+                </span>
               </div>
-              {/* Animated green dot next to the active player */}
-              {game.turn() === letter && status === "active" && <span className="cp-dot" />}
+              {/* Timer */}
+              <div className={timerCls(color)}>
+                {fmtTimer(timers[color])}
+              </div>
+              {game.turn() === letter && status === "active" && !isReviewing && (
+                <span className="cp-dot" />
+              )}
             </div>
           ))}
 
@@ -459,22 +556,53 @@ function ChessPage() {
           )}
         </div>
 
-        {/* Scrollable move history in algebraic notation */}
+        {/* Move history — clickable for review */}
         <div className="cp-card cp-moves-card">
-          <p className="cp-card-label">MOVES</p>
+          <div className="cp-moves-header">
+            <p className="cp-card-label" style={{margin:0}}>MOVES</p>
+            {isReviewing && (
+              <button className="cp-live-btn" onClick={() => goToMove(-1)}>
+                ▶ Live
+              </button>
+            )}
+          </div>
           <div className="cp-moves">
             {movePairs.length === 0 && <span className="cp-no-moves">No moves yet</span>}
             {movePairs.map(p => (
               <div key={p.n} className="cp-mrow">
                 <span className="cp-mn">{p.n}.</span>
-                <span className="cp-mw">{p.w}</span>
-                <span className="cp-mb">{p.b}</span>
+                <span
+                  className={`cp-mw cp-move-btn${viewIndex === p.wIdx ? " cp-move-active" : ""}`}
+                  onClick={() => goToMove(p.wIdx)}
+                  title={`Go to move ${p.n} (white)`}
+                >{p.w}</span>
+                {p.b && (
+                  <span
+                    className={`cp-mb cp-move-btn${viewIndex === p.bIdx ? " cp-move-active" : ""}`}
+                    onClick={() => goToMove(p.bIdx)}
+                    title={`Go to move ${p.n} (black)`}
+                  >{p.b}</span>
+                )}
               </div>
             ))}
           </div>
+          {/* Move navigation arrows */}
+          {moveHistory.length > 0 && (
+            <div className="cp-move-nav">
+              <button onClick={() => goToMove(0)} title="First move">⏮</button>
+              <button onClick={() => goToMove(Math.max(0, (viewIndex === -1 ? moveHistory.length - 1 : viewIndex) - 1))} title="Previous">◀</button>
+              <button onClick={() => {
+                const cur = viewIndex === -1 ? moveHistory.length - 1 : viewIndex;
+                const next = cur + 1;
+                if (next >= moveHistory.length) goToMove(-1);
+                else goToMove(next);
+              }} title="Next">▶</button>
+              <button onClick={() => goToMove(-1)} title="Latest">⏭</button>
+            </div>
+          )}
         </div>
 
-        {/* Board colour theme swatches */}
+        {/* Board themes */}
         <div className="cp-card">
           <p className="cp-card-label">THEME</p>
           <div className="cp-theme-grid">
@@ -491,24 +619,18 @@ function ChessPage() {
         </div>
       </aside>
 
-      {/* ═══════════════════════════════
-          MAIN — board + controls
-      ═══════════════════════════════ */}
+      {/* ═══════ MAIN ═══════ */}
       <main className="cp-main">
 
-        {/* Top bar: home, room code, chat toggle */}
+        {/* Top bar */}
         <div className="cp-topbar">
           <button className="cp-btn cp-home" onClick={() => navigate("/")}>← Home</button>
-
-          {/* Room code display with copy buttons */}
           <div className="cp-code-box">
             <span className="cp-code-label">ROOM</span>
             <span className="cp-code-val">{roomId}</span>
-            <button className="cp-icon-btn" onClick={copyCode} title="Copy code">{codeCopied ? "✅" : "📋"}</button>
-            <button className="cp-icon-btn" onClick={copyLink} title="Copy link">{copied ? "✅" : "🔗"}</button>
+            <button className="cp-icon-btn" onClick={copyCode}>{codeCopied ? "✅" : "📋"}</button>
+            <button className="cp-icon-btn" onClick={copyLink}>{copied ? "✅" : "🔗"}</button>
           </div>
-
-          {/* Chat button — shows unread badge when panel is closed */}
           <button
             className={`cp-btn cp-chat-btn${showPanel ? " cp-chat-on" : ""}`}
             onClick={handleTogglePanel}
@@ -520,40 +642,48 @@ function ChessPage() {
           </button>
         </div>
 
-        {/* Status pill — changes colour based on game state */}
-        <div className={`cp-status ${st.cls}`}>{st.text}</div>
+        {/* Status + review banner */}
+        {isReviewing ? (
+          <div className="cp-status s-spec">
+            📖 Reviewing move {viewIndex + 1} — <span className="cp-link" onClick={() => goToMove(-1)}>back to live</span>
+          </div>
+        ) : (
+          <div className={`cp-status ${st.cls}`}>{st.text}</div>
+        )}
 
-        {/* Banner shown only to spectators */}
-        {isSpectator && (
-          <div className="cp-spec-banner">
-            👁 Spectating — you can watch but not move pieces
+        {isSpectator && <div className="cp-spec-banner">👁 Spectating — view only</div>}
+
+        {/* ✅ Rejoin button shown when opponent disconnects */}
+        {isDisconnected && status !== "finished" && (
+          <div className="cp-rejoin-banner">
+            ⚠️ Opponent disconnected
+            <button className="cp-rejoin-btn" onClick={handleRejoin}>🔄 Reconnect</button>
           </div>
         )}
 
-        {/* Error toast — auto-dismisses after 3 seconds */}
-        {error && <div className="cp-error-toast">{error}</div>}
+        {error && !isDisconnected && <div className="cp-error-toast">{error}</div>}
 
-        {/* Chess board */}
+        {/* Board */}
         <div className="cp-board">
           <Chessboard
-            position={game.fen()}                   // Current board position as FEN string
-            onPieceDrop={onDrop}                    // Called when a drag-drop move is attempted
-            onPieceDragBegin={onDragBegin}           // Highlights legal squares on drag start
+            position={displayFen}                   // live or review FEN
+            onPieceDrop={onDrop}
+            onPieceDragBegin={onDragBegin}
             onPieceDragEnd={() => { setSquareStyles({}); setSelectedSq(null); }}
-            onSquareClick={onSquareClick}               // Click/touch to move (mobile friendly)
-            areArrowsAllowed={false}                    // disable right-click arrows (cleaner)
-            customSquareStyles={squareStyles}        // Highlight last move + legal squares
-            isDraggablePiece={isPieceDraggable}      // Only allow player to drag their own pieces
-            boardWidth={boardWidth}                  // Responsive — calculated from available space
-            boardOrientation={myColor || "white"}    // Flip board for Black player
+            onSquareClick={onSquareClick}            // click-to-move
+            customSquareStyles={squareStyles}
+            isDraggablePiece={isPieceDraggable}
+            boardWidth={boardWidth}
+            boardOrientation={myColor || "white"}
             customDarkSquareStyle={{ backgroundColor: themes[boardTheme].dark }}
             customLightSquareStyle={{ backgroundColor: themes[boardTheme].light }}
+            areArrowsAllowed={false}
           />
         </div>
 
-        {/* Bottom action buttons */}
+        {/* Bottom actions */}
         <div className="cp-bottom">
-          {status === "active" && myColor && (
+          {status === "active" && myColor && !isReviewing && (
             <button className="cp-btn cp-resign" onClick={handleResign}>🏳️ Resign</button>
           )}
           {status === "finished" && (
@@ -562,9 +692,7 @@ function ChessPage() {
         </div>
       </main>
 
-      {/* ═══════════════════════════════
-          PANEL — chat + voice (rendered when showPanel is true)
-      ═══════════════════════════════ */}
+      {/* ═══════ PANEL ═══════ */}
       {showPanel && (
         <ChatVoicePanel roomId={roomId} username={username} isOpen={showPanel} />
       )}

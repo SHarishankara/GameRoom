@@ -146,7 +146,7 @@ function ChatVoicePanel({ roomId, username }) {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
           const ans = await pc.createAnswer();
           await pc.setLocalDescription(ans);
-          socket.emit("voice-signal", { roomId, signal: ans, to: from, fromUsername: username });
+          socket.emit("voice-signal", { roomId, signal: ans, to: from });
         } else if (signal.type === "answer") {
           await pc.setRemoteDescription(new RTCSessionDescription(signal));
         } else if (signal.candidate) {
@@ -188,7 +188,7 @@ function ChatVoicePanel({ roomId, username }) {
       localStreamRef.current = stream;
       setIsMicOn(true);
       detectSpeaking(stream);
-      socket.emit("voice-join", { roomId, username });
+      socket.emit("voice-join", { roomId });
     } catch (e) {
       console.warn("Mic unavailable:", e.message);
     }
@@ -317,7 +317,7 @@ function ChatVoicePanel({ roomId, username }) {
     // Save locally immediately — don't wait for server echo
     saveMessage(roomId, msg);
     setMessages([...getHistory(roomId)]);
-    socket.emit("chat-message", { roomId, username, message: input.trim() });
+    socket.emit("chat-message", { roomId, message: input.trim() });
     setInput("");
   }
 
@@ -327,7 +327,7 @@ function ChatVoicePanel({ roomId, username }) {
 
   function handleInputChange(e) {
     setInput(e.target.value);
-    socket.emit("typing", { roomId, username }); // notify others
+    socket.emit("typing", { roomId }); // notify others
   }
 
   return (

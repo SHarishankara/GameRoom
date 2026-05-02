@@ -1,38 +1,56 @@
 // src/services/socket.js
 // ─────────────────────────────────────────────────────────────
-// Single shared Socket.IO client instance for the entire app.
-// We create it once here and import it wherever needed.
-// This prevents multiple connections being opened accidentally.
+// Single socket instance. Sends JWT in auth handshake (fix #1).
+// Server verifies token and derives username — client can't spoof.
 // ─────────────────────────────────────────────────────────────
-
 import { io } from "socket.io-client";
 
-// Use the environment variable in production (set in .env).
-// Falls back to localhost for local development.
 const URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
 
-// Create the socket but do NOT connect yet (autoConnect: false).
-// We manually call connectSocket() after the user logs in,
-// so we don't waste a connection on the auth page.
-export const socket = io(URL, {
-  autoConnect: false,
+// Internal socket instance — managed here, not exported directly
+let _socket = null;
 
-  // Automatically try to reconnect if the connection drops.
-  reconnection: true,
-  reconnectionAttempts: 10, // Give up after 10 failed attempts
-  reconnectionDelay: 1000,  // Wait 1 second between each attempt
+function buildSocket() {
+  const token = localStorage.getItem("token") || "";
+  return io(URL, {
+    autoConnect:          false,
+    reconnection:         true,
+    reconnectionAttempts: 10,
+    reconnectionDelay:    1500,
+    // ✅ fix #1: JWT sent on handshake — server verifies it
+    auth: { token },
+  });
+}
+
+// ── connectSocket ──────────────────────────────────────────────
+// Call once after login. Creates a fresh socket with the current
+// token (important — token may not exist when module first loads).
+export function connectSocket() {
+  if (_socket?.connected) return; // already connected — nothing to do
+  if (_socket) { _socket.disconnect(); _socket = null; } // stale — rebuild
+  _socket = buildSocket();
+  _socket.connect();
+}
+
+// ── disconnectSocket ───────────────────────────────────────────
+export function disconnectSocket() {
+  _socket?.disconnect();
+  _socket = null;
+}
+
+// ── socket ────────────────────────────────────────────────────
+// Proxy so `import { socket }` always forwards to the live instance.
+// This means components never hold a stale reference.
+export const socket = new Proxy({}, {
+  get(_, prop) {
+    // Auto-init if not yet created (e.g. first import before login)
+    if (!_socket) _socket = buildSocket();
+    const val = _socket[prop];
+    // Bind methods so `this` context is correct
+    return typeof val === "function" ? val.bind(_socket) : val;
+  },
+  set(_, prop, value) {
+    if (_socket) _socket[prop] = value;
+    return true;
+  },
 });
-
-// ── connectSocket ──────────────────────────────────────────
-// Call this once after login. The guard prevents calling
-// socket.connect() multiple times if connectSocket() is
-// accidentally called more than once (e.g. on re-renders).
-export const connectSocket = () => {
-  if (!socket.connected) socket.connect();
-};
-
-// ── disconnectSocket ───────────────────────────────────────
-// Call this on logout to cleanly close the connection.
-export const disconnectSocket = () => {
-  if (socket.connected) socket.disconnect();
-};
