@@ -16,6 +16,57 @@ import "../styles/ChessPage.css";
 import { socket, connectSocket } from "../services/socket";
 import ChatVoicePanel from "../components/ChatVoicePanel";
 
+// ── Chess sounds using Web Audio API (no external files needed) ──
+// Generates move/capture/check sounds programmatically.
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === "move") {
+      // Short clean click — like a piece placed on board
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(520, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(420, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.12);
+    } else if (type === "capture") {
+      // Heavier thud — piece taken
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + 0.18);
+      gain.gain.setValueAtTime(0.28, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.22);
+    } else if (type === "check") {
+      // Two-tone alert — king is in check
+      osc.type = "square";
+      osc.frequency.setValueAtTime(660, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.25);
+    } else if (type === "gameover") {
+      // Descending tone — game ended
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(220, ctx.currentTime + 0.5);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.5);
+    }
+  } catch (e) { /* AudioContext blocked — silently ignore */ }
+}
+
+
 function ChessPage() {
   const navigate = useNavigate();
   const { roomId } = useParams(); // Room code from the URL, e.g. /chess/A3F9B2
@@ -29,6 +80,7 @@ function ChessPage() {
   const [game, setGame]                 = useState(new Chess());       // chess.js instance
   const [boardTheme, setBoardTheme]     = useState("classic");         // colour theme name
   const [squareStyles, setSquareStyles] = useState({});                // highlight squares
+  const [selectedSq, setSelectedSq]     = useState(null);              // click-to-move selected square
   const [moveHistory, setMoveHistory]   = useState([]);                // list of SAN moves
   const [error, setError]               = useState(null);              // inline error toast
 
@@ -53,7 +105,6 @@ function ChessPage() {
   // myColorRef mirrors myColor as a ref so socket callbacks (which close over stale state)
   // can always read the current value without needing to be re-registered.
   const myColorRef = useRef(null);
-  const statusRef  = useRef("connecting");
 
   // joinedRef prevents emitting "join-room" twice if the component re-renders
   // or if connectSocket() triggers multiple "connect" events.
@@ -113,7 +164,7 @@ function ChessPage() {
   const joinRoom = useCallback(() => {
     if (joinedRef.current) return; // Guard: don't join twice
     joinedRef.current = true;
-    setStatus("waiting"); statusRef.current = "waiting";
+    setStatus("waiting");
     socket.emit("join-room", { roomId, username, userId, role: "player" });
   }, [roomId, username, userId]);
 
@@ -133,7 +184,7 @@ function ChessPage() {
     socket.on("room-joined", (data) => {
       myColorRef.current = data.color;
       setMyColor(data.color);
-      setStatus(data.status); statusRef.current = data.status;
+      setStatus(data.status);
       setPlayers(data.players || { white: null, black: null });
       setSpectatorCount(data.spectatorCount || 0);
       // Restore board to where it currently is (important for rejoin mid-game)
@@ -147,7 +198,7 @@ function ChessPage() {
     // ── player-joined ──────────────────────────────────────
     // Fired when the second player joins — game becomes "active".
     socket.on("player-joined", (data) => {
-      setStatus(data?.status || "active"); statusRef.current = data?.status || "active";
+      setStatus(data?.status || "active");
       if (data?.players) setPlayers(data.players);
     });
 
@@ -165,14 +216,19 @@ function ChessPage() {
         [data.to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
       });
       setError(null);
+      // Play sound — check takes priority over capture over normal move
+      if (data.isCheck) playSound("check");
+      else if (data.isCapture) playSound("capture");
+      else playSound("move");
     });
 
     // ── game-over ──────────────────────────────────────────
     // Show a personalised end message depending on whether the
     // local player won, lost, drew, or was a spectator.
     socket.on("game-over", ({ winner, endReason }) => {
-      setStatus("finished"); statusRef.current = "finished";
+      setStatus("finished");
       const color = myColorRef.current; // use ref — state may be stale in callback
+      playSound("gameover");
       setGameOverMsg(
         !color
           ? `${winner === "draw" ? "Draw 🤝" : winner + " wins 🏆"} — ${endReason}`
@@ -215,21 +271,77 @@ function ChessPage() {
     };
   }, [joinRoom]);
 
-  // ── onDragBegin ───────────────────────────────────────────
-  // Highlight legal destination squares when the player
-  // starts dragging a piece, so they can see where it can go.
-  function onDragBegin(piece, sq) {
-    const moves  = game.moves({ square: sq, verbose: true });
-    const styles = { [sq]: { backgroundColor: "rgba(255,200,0,0.5)" } }; // highlight source
+  // ── getLegalStyles — chess.com style dots ─────────────────
+  // Empty squares get a small filled dot; capture squares get
+  // a hollow ring around the existing piece (like chess.com).
+  function getLegalStyles(sq, currentGame) {
+    const g = currentGame || game;
+    const moves  = g.moves({ square: sq, verbose: true });
+    const styles = {
+      [sq]: { background: "rgba(255,200,0,0.5)", borderRadius: "4px" }, // source highlight
+    };
     moves.forEach(m => {
-      // Capture squares get a red dot; empty squares get a small grey dot
-      styles[m.to] = {
-        background: game.get(m.to)?.color !== game.turn()
-          ? "radial-gradient(circle, rgba(255,80,0,.4) 60%, transparent 60%)"
-          : "radial-gradient(circle, rgba(0,0,0,.2) 28%, transparent 28%)",
-      };
+      const isCapture = !!g.get(m.to);
+      styles[m.to] = isCapture
+        // Capture: ring around the piece (hollow circle overlay)
+        ? { background: "radial-gradient(circle, transparent 58%, rgba(0,0,0,0.35) 58%, rgba(0,0,0,0.35) 68%, transparent 68%)" }
+        // Empty: small filled dot in centre
+        : { background: "radial-gradient(circle, rgba(0,0,0,0.28) 26%, transparent 26%)" };
     });
-    setSquareStyles(styles);
+    return styles;
+  }
+
+  // ── onDragBegin — show legal moves on drag start ──────────
+  function onDragBegin(piece, sq) {
+    setSquareStyles(getLegalStyles(sq));
+  }
+
+  // ── onSquareClick — click/touch to move ───────────────────
+  // First click selects a piece and highlights legal moves.
+  // Second click on a legal square executes the move.
+  // Clicking the same square or an illegal square deselects.
+  function onSquareClick(sq) {
+    if (statusRef.current !== "active" || !myColorRef.current) return;
+    const mine = myColorRef.current === "white" ? "w" : "b";
+
+    // If no square selected yet — try to select this square
+    if (!selectedSq) {
+      const piece = game.get(sq);
+      // Only select own piece on own turn
+      if (!piece || piece.color !== mine || piece.color !== game.turn()) return;
+      setSelectedSq(sq);
+      setSquareStyles(getLegalStyles(sq));
+      return;
+    }
+
+    // A square is already selected — try to move to clicked square
+    if (selectedSq === sq) {
+      // Clicked same square: deselect
+      setSelectedSq(null);
+      setSquareStyles({});
+      return;
+    }
+
+    // Check if clicked square is a legal destination
+    const legalMoves = game.moves({ square: selectedSq, verbose: true });
+    const isLegal = legalMoves.some(m => m.to === sq);
+
+    if (isLegal) {
+      // Execute the move via existing onDrop logic
+      onDrop(selectedSq, sq);
+      setSelectedSq(null);
+    } else {
+      // Maybe clicking another own piece — switch selection
+      const piece = game.get(sq);
+      if (piece && piece.color === mine && piece.color === game.turn()) {
+        setSelectedSq(sq);
+        setSquareStyles(getLegalStyles(sq));
+      } else {
+        // Clicked empty/enemy non-legal square — deselect
+        setSelectedSq(null);
+        setSquareStyles({});
+      }
+    }
   }
 
   // ── onDrop ────────────────────────────────────────────────
@@ -273,8 +385,8 @@ function ChessPage() {
   // Prevents dragging opponent's pieces or pieces out of turn.
   // Spectators can never drag anything.
   function isPieceDraggable({ piece }) {
-    if (statusRef.current !== "active" || !myColorRef.current) return false; // ✅ use refs — state is stale in callbacks
-    const mine = myColorRef.current === "white" ? "w" : "b";
+    if (status !== "active" || !myColor) return false;
+    const mine = myColor === "white" ? "w" : "b";
     return piece[0] === mine && piece[0] === game.turn();
   }
 
@@ -427,7 +539,9 @@ function ChessPage() {
             position={game.fen()}                   // Current board position as FEN string
             onPieceDrop={onDrop}                    // Called when a drag-drop move is attempted
             onPieceDragBegin={onDragBegin}           // Highlights legal squares on drag start
-            onPieceDragEnd={() => setSquareStyles({})} // Clear highlights when drag ends
+            onPieceDragEnd={() => { setSquareStyles({}); setSelectedSq(null); }}
+            onSquareClick={onSquareClick}               // Click/touch to move (mobile friendly)
+            areArrowsAllowed={false}                    // disable right-click arrows (cleaner)
             customSquareStyles={squareStyles}        // Highlight last move + legal squares
             isDraggablePiece={isPieceDraggable}      // Only allow player to drag their own pieces
             boardWidth={boardWidth}                  // Responsive — calculated from available space

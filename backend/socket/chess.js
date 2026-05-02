@@ -116,6 +116,7 @@ function registerSocketHandlers(io) {
           from, to, fen: newFen,
           turn: chess.turn(),
           isCheck: chess.isCheck(),
+          isCapture: !!move.captured, // ✅ tells frontend to play capture sound
         });
 
         // Handle game over
