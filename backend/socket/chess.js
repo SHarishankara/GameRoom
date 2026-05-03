@@ -229,7 +229,7 @@ function registerSocketHandlers(io) {
 
     // ── VOICE ─────────────────────────────────────────────────
 socket.on("voice-join", ({ roomId }) => {
-  socket.join(roomId); // ✅ CRITICAL FIX
+  socket.join(roomId); // 🔥 MUST HAVE (this is your bug)
 
   socket.to(roomId).emit("voice-user-joined", {
     socketId: socket.id,
@@ -243,7 +243,7 @@ socket.on("voice-join", ({ roomId }) => {
       room.players.black,
       ...room.spectators
     ]
-      .filter(Boolean)
+      .filter(u => u && u.socketId && u.socketId !== socket.id)
       .map(u => ({ ...u }));
 
     socket.emit("room-users", users);
