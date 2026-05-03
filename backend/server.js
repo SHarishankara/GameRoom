@@ -114,7 +114,7 @@ app.use("/api", rateLimit({
 connectDB();
 
 // ── REST Routes ───────────────────────────────────────────────
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authRoutes); 
 app.use("/api/game", gameRoutes);
 app.get("/", (req, res) => res.json({ status: "Game Platform API is running 🚀" }));
 

@@ -108,13 +108,25 @@ function ChatVoicePanel({ roomId, username }) {
     };
 
     // Server sends current room users when we join voice
-    const onRoomUsers = (users) => {
-      setVoiceUsers(
-        users
-          .filter(u => u.username !== username)
-          .map(u => ({ ...u, speaking: false, volume: 1.0, muted: false }))
-      );
-    };
+const onRoomUsers = async (users) => {
+  const others = users.filter(u => u.username !== username);
+
+  setVoiceUsers(
+    others.map(u => ({
+      ...u,
+      speaking: false,
+      volume: 1.0,
+      muted: false
+    }))
+  );
+
+  // ✅ create peers for existing users
+  for (const user of others) {
+    if (!peersRef.current[user.socketId]) {
+      await createPeer(user.socketId, false);
+    }
+  }
+};
 
     // Another user joined the voice channel — create peer as initiator
     const onVoiceJoined = async ({ socketId, username: who }) => {
@@ -182,17 +194,25 @@ function ChatVoicePanel({ roomId, username }) {
   }, [username, roomId]);
 
   // ── Voice: request mic and join channel ───────────────────
-  async function joinVoice() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStreamRef.current = stream;
-      setIsMicOn(true);
-      detectSpeaking(stream);
-      socket.emit("voice-join", { roomId });
-    } catch (e) {
-      console.warn("Mic unavailable:", e.message);
-    }
+async function joinVoice() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    localStreamRef.current = stream;
+
+    setIsMicOn(true);
+    detectSpeaking(stream);
+
+    socket.emit("voice-join", { roomId });
+
+    // ✅ FIX: attach stream to existing peers
+    Object.values(peersRef.current).forEach(pc => {
+      stream.getTracks().forEach(t => pc.addTrack(t, stream));
+    });
+
+  } catch (e) {
+    console.warn("Mic unavailable:", e.message);
   }
+}
 
   // ── Voice: stop mic and leave channel ─────────────────────
   function leaveVoice() {

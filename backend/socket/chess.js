@@ -228,15 +228,27 @@ function registerSocketHandlers(io) {
     });
 
     // ── VOICE ─────────────────────────────────────────────────
-    socket.on("voice-join", ({ roomId }) => {
-      socket.to(roomId).emit("voice-user-joined", { socketId: socket.id, username });
-      const room = activeRooms[roomId];
-      if (room) {
-        const users = [room.players.white, room.players.black, ...room.spectators]
-          .filter(Boolean).map(u => ({ ...u }));
-        socket.emit("room-users", users);
-      }
-    });
+socket.on("voice-join", ({ roomId }) => {
+  socket.join(roomId); // ✅ CRITICAL FIX
+
+  socket.to(roomId).emit("voice-user-joined", {
+    socketId: socket.id,
+    username
+  });
+
+  const room = activeRooms[roomId];
+  if (room) {
+    const users = [
+      room.players.white,
+      room.players.black,
+      ...room.spectators
+    ]
+      .filter(Boolean)
+      .map(u => ({ ...u }));
+
+    socket.emit("room-users", users);
+  }
+});
 
     socket.on("voice-leave", ({ roomId }) => {
       socket.to(roomId).emit("voice-user-left", { socketId: socket.id });
