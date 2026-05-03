@@ -463,6 +463,13 @@ function ChessPage() {
       return false;
     }
 
+    // 🔥 INSTANT UI UPDATE
+
+
+
+  gameRef.current = testGame;
+  setGame(new Chess(testGame.fen()));
+
     // ✅ Optimistically show highlight squares — board FEN stays unchanged
     // Real board update happens in onMoveMade when server echoes back
     setSquareStyles({
