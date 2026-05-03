@@ -296,33 +296,47 @@ function ChessPage() {
     // Do NOT optimistically update board. Only update from this event.
     // FIX: move history must be maintained incrementally, not rebuilt from Chess(fen).history()
     // because Chess(fen) has no history — it's a snapshot.
-    const onMoveMade = (data) => {
-      // Append the new FEN and SAN to our tracked lists
-      setAllFens(prev => {
-        if (prev[prev.length - 1] === data.fen) return prev;
-        return [...prev, data.fen];
-      });
-      // FIX: append just the new SAN move — don't rebuild history from FEN
-      if (data.san) {
-        setMoveHistory(prev => [...prev, data.san]);
-      }
-      // Update game ref and state to the server-confirmed FEN
-      const g = new Chess(data.fen);
-      gameRef.current = g;
-      setGame(g);
-      setViewIndex(-1);
-      setSquareStyles({
-        [data.from]: { backgroundColor: "rgba(255,200,0,0.45)" },
-        [data.to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
-      });
-      setSelectedSq(null);
-      setError(null);
-      if (data.timers) setTimers(data.timers);
+const onMoveMade = (data) => {
+  const currentFen = gameRef.current.fen();
 
-      if (data.isCheck)        playSound("check");
-      else if (data.isCapture) playSound("capture");
-      else                      playSound("move");
-    };
+  // 🔥 1. Skip everything if it's your own move (already updated instantly)
+  if (currentFen === data.fen) return;
+
+  // 🔥 2. Only opponent moves reach here
+
+  // Update move history + FEN list
+  setAllFens(prev => {
+    if (prev[prev.length - 1] === data.fen) return prev;
+    return [...prev, data.fen];
+  });
+
+  if (data.san) {
+    setMoveHistory(prev => [...prev, data.san]);
+  }
+
+  // Update board state
+  const g = new Chess(data.fen);
+  gameRef.current = g;
+  setGame(g);
+
+  // UI updates
+  setViewIndex(-1);
+
+  setSquareStyles({
+    [data.from]: { backgroundColor: "rgba(255,200,0,0.45)" },
+    [data.to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
+  });
+
+  setSelectedSq(null);
+  setError(null);
+
+  if (data.timers) setTimers(data.timers);
+
+  // Sounds
+  if (data.isCheck)        playSound("check");
+  else if (data.isCapture) playSound("capture");
+  else                     playSound("move");
+};
 
     const onTimerTick = ({ timers }) => {
       setTimers(timers);
