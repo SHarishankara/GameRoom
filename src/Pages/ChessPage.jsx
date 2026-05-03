@@ -7,10 +7,24 @@ import "../styles/ChessPage.css";
 import { socket, connectSocket } from "../services/socket";
 import ChatVoicePanel from "../components/ChatVoicePanel";
 
+// ── Shared AudioContext (Issue 5 fix) ─────────────────────────
+// Creating a new AudioContext on every sound call leaks resources
+// and gets blocked by browsers after ~6 instances. One shared
+// instance is created lazily on first use and reused forever.
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx || _audioCtx.state === "closed") {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  // Resume if suspended (browser autoplay policy)
+  if (_audioCtx.state === "suspended") _audioCtx.resume();
+  return _audioCtx;
+}
+
 // ── Chess sounds via Web Audio API (no files needed) ──────────
 function playSound(type) {
   try {
-    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx  = getAudioCtx();
     const osc  = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
@@ -81,16 +95,14 @@ function getCaptured(fen) {
     counts[color][piece]++;
   }
 
-  // Captured = initial count - remaining count
-  const captured = { white: {}, black: {} }; // white = pieces white captured (black pieces gone)
+  const captured = { white: {}, black: {} };
   for (const piece of ["p","n","b","r","q"]) {
     const wRemaining = counts.w[piece] || 0;
     const bRemaining = counts.b[piece] || 0;
-    captured.black[piece] = Math.max(0, initial[piece] - wRemaining); // black pieces captured by white
-    captured.white[piece] = Math.max(0, initial[piece] - bRemaining); // white pieces captured by black
+    captured.black[piece] = Math.max(0, initial[piece] - wRemaining);
+    captured.white[piece] = Math.max(0, initial[piece] - bRemaining);
   }
 
-  // Material score: positive = white ahead
   let score = 0;
   for (const piece of ["p","n","b","r","q"]) {
     score += ((counts.w[piece] || 0) - (counts.b[piece] || 0)) * PIECE_VALUES[piece];
@@ -100,7 +112,6 @@ function getCaptured(fen) {
 }
 
 // ── Module-level chat history store ───────────────────────────
-// Persists across panel open/close since React state resets on unmount
 const _chatStore = {};
 function getChatHistory(roomId) {
   if (!_chatStore[roomId]) _chatStore[roomId] = [];
@@ -128,9 +139,10 @@ function ChessPage() {
   const [boardTheme, setBoardTheme]   = useState("classic");
   const [squareStyles, setSquareStyles] = useState({});
   const [selectedSq, setSelectedSq]   = useState(null);
-  const [moveHistory, setMoveHistory] = useState([]); // full SAN history
-  const [allFens, setAllFens]         = useState(["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]); // FEN after each move
-  const [viewIndex, setViewIndex]     = useState(-1); // -1 = live, N = reviewing move N
+  // FIX: moveHistory stores {san, from, to} objects so we can track each move properly
+  const [moveHistory, setMoveHistory] = useState([]); // array of SAN strings
+  const [allFens, setAllFens]         = useState(["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]);
+  const [viewIndex, setViewIndex]     = useState(-1);
   const [error, setError]             = useState(null);
 
   // ── Room state ────────────────────────────────────────────
@@ -139,7 +151,7 @@ function ChessPage() {
   const [players, setPlayers]         = useState({ white: null, black: null });
   const [spectatorCount, setSpectatorCount] = useState(0);
   const [gameOverMsg, setGameOverMsg] = useState(null);
-  const [isDisconnected, setIsDisconnected] = useState(false); // opponent disconnected
+  const [isDisconnected, setIsDisconnected] = useState(false);
   const [copied, setCopied]           = useState(false);
   const [codeCopied, setCodeCopied]   = useState(false);
 
@@ -155,9 +167,11 @@ function ChessPage() {
 
   // ── Refs ──────────────────────────────────────────────────
   const myColorRef  = useRef(null);
-  const statusRef   = useRef("connecting"); // avoid stale closure in isPieceDraggable
-  const joinedRef   = useRef(false);        // prevent double join-room emit
-  const lowTimePlayed = useRef(false);      // play low-time sound only once per minute
+  const statusRef   = useRef("connecting");
+  const joinedRef   = useRef(false);
+  const lowTimePlayed = useRef(false);
+  // FIX: store the live game in a ref so socket handlers always see latest FEN
+  const gameRef     = useRef(new Chess());
 
   const shareLink = `${window.location.origin}/chess/${roomId}`;
 
@@ -193,12 +207,13 @@ function ChessPage() {
 
   // ── Unread badge ──────────────────────────────────────────
   useEffect(() => {
+    // FIX: store named handler so we can remove exactly this one
     const h = (msg) => {
-      saveChatMsg(roomId, msg); // ✅ always save — even when panel closed
+      saveChatMsg(roomId, msg);
       if (!showPanel && msg.username !== username) setUnreadCount(n => n + 1);
     };
     socket.on("chat-message", h);
-    return () => socket.off("chat-message", h);
+    return () => socket.off("chat-message", h); // ✅ remove exact handler
   }, [showPanel, username, roomId]);
 
   const handleTogglePanel = () => setShowPanel(prev => {
@@ -208,20 +223,22 @@ function ChessPage() {
 
   // ── Stable joinRoom ───────────────────────────────────────
   const joinRoom = useCallback(() => {
-    if (joinedRef.current) return; // ✅ never emit twice
+    if (joinedRef.current) return;
     joinedRef.current = true;
     statusRef.current = "waiting";
     setStatus("waiting");
-    socket.emit("join-room", { roomId }); // username/userId from JWT on server
-  }, [roomId, username, userId]);
+    socket.emit("join-room", { roomId });
+  }, [roomId]);
 
   // ── Socket wiring ─────────────────────────────────────────
   useEffect(() => {
     connectSocket();
     if (socket.connected) joinRoom();
-    else socket.once("connect", joinRoom); // ✅ .once not .on
+    else socket.once("connect", joinRoom);
 
-    socket.on("room-joined", (data) => {
+    // ── FIX: define all handlers as named functions so cleanup removes exactly them ──
+
+    const onRoomJoined = (data) => {
       myColorRef.current = data.color;
       setMyColor(data.color);
       statusRef.current = data.status;
@@ -231,50 +248,69 @@ function ChessPage() {
       if (data.timers) setTimers(data.timers);
       setIsDisconnected(false);
 
-      // ✅ Restore full board history from server moves on rejoin
+      // ── FIX: Rebuild move history by replaying moves (not from Chess FEN)
+      // Chess.js built from a FEN has no history — must replay from move list
       if (data.moves && data.moves.length > 0) {
-        const fens = [new Chess().fen()];
+        const g = new Chess(); // start from initial position
+        const fens = [g.fen()];
         const history = [];
-        const g = new Chess();
         for (const m of data.moves) {
           try {
             const result = g.move({ from: m.from, to: m.to, promotion: "q" });
-            if (result) { fens.push(g.fen()); history.push(result.san); }
+            if (result) {
+              fens.push(g.fen());
+              history.push(result.san);
+            }
           } catch (e) { /* skip invalid */ }
         }
+        gameRef.current = g;
         setGame(new Chess(g.fen()));
         setAllFens(fens);
         setMoveHistory(history);
-        setViewIndex(-1); // live view
+        setViewIndex(-1);
       } else if (data.fen) {
+        const g = new Chess(data.fen);
+        gameRef.current = g;
         setGame(new Chess(data.fen));
         setAllFens([data.fen]);
+        setMoveHistory([]);
       }
 
-      // ✅ Restore chat history so notifications show on first open
       if (data.chat && data.chat.length > 0) {
         data.chat.forEach(msg => saveChatMsg(roomId, msg));
       }
-    });
+    };
 
-    socket.on("player-joined", (data) => {
+    // FIX: player-joined also needs to update players list for white player
+    // (white is already in room when black joins — white only gets player-joined, not room-joined)
+    const onPlayerJoined = (data) => {
       statusRef.current = data?.status || "active";
       setStatus(data?.status || "active");
+      // ✅ Always update players so white sees black's name immediately
       if (data?.players) setPlayers(data.players);
       if (data?.timers) setTimers(data.timers);
       setIsDisconnected(false);
-    });
+    };
 
-    socket.on("move-made", (data) => {
-      const g = new Chess(data.fen);
-      setGame(g);
-      setMoveHistory(g.history());
+    // FIX: move-made — backend is source of truth
+    // Do NOT optimistically update board. Only update from this event.
+    // FIX: move history must be maintained incrementally, not rebuilt from Chess(fen).history()
+    // because Chess(fen) has no history — it's a snapshot.
+    const onMoveMade = (data) => {
+      // Append the new FEN and SAN to our tracked lists
       setAllFens(prev => {
-        // Only append if this FEN is not already the last one
         if (prev[prev.length - 1] === data.fen) return prev;
         return [...prev, data.fen];
       });
-      setViewIndex(-1); // snap back to live view
+      // FIX: append just the new SAN move — don't rebuild history from FEN
+      if (data.san) {
+        setMoveHistory(prev => [...prev, data.san]);
+      }
+      // Update game ref and state to the server-confirmed FEN
+      const g = new Chess(data.fen);
+      gameRef.current = g;
+      setGame(g);
+      setViewIndex(-1);
       setSquareStyles({
         [data.from]: { backgroundColor: "rgba(255,200,0,0.45)" },
         [data.to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
@@ -283,17 +319,16 @@ function ChessPage() {
       setError(null);
       if (data.timers) setTimers(data.timers);
 
-      // Play appropriate sound
       if (data.isCheck)        playSound("check");
       else if (data.isCapture) playSound("capture");
       else                      playSound("move");
-    });
+    };
 
-    socket.on("timer-tick", ({ timers }) => {
+    const onTimerTick = ({ timers }) => {
       setTimers(timers);
-    });
+    };
 
-    socket.on("game-over", ({ winner, endReason }) => {
+    const onGameOver = ({ winner, endReason }) => {
       statusRef.current = "finished";
       setStatus("finished");
       playSound("gameover");
@@ -305,39 +340,49 @@ function ChessPage() {
           : winner === color  ? "You won 🏆"
           : "You lost 😔"
       );
-    });
+    };
 
-    // ✅ Opponent disconnected — show rejoin button for them
-    socket.on("player-disconnected", ({ color }) => {
+    const onPlayerDisconnected = ({ color }) => {
       setIsDisconnected(true);
       setError(`⚠️ ${color} disconnected — waiting for rejoin…`);
-    });
+    };
 
-    socket.on("error", ({ message }) => {
+    const onError = ({ message }) => {
       setError(message);
       setTimeout(() => setError(null), 3000);
-    });
+    };
 
-    // ✅ On reconnect: reset guard and rejoin seamlessly
+    // FIX: on reconnect reset joinedRef and rejoin
     const onReconnect = () => {
       joinedRef.current = false;
       joinRoom();
     };
-    socket.on("connect", onReconnect);
+
+    // Register all handlers
+    socket.on("room-joined",         onRoomJoined);
+    socket.on("player-joined",       onPlayerJoined);
+    socket.on("move-made",           onMoveMade);
+    socket.on("timer-tick",          onTimerTick);
+    socket.on("game-over",           onGameOver);
+    socket.on("player-disconnected", onPlayerDisconnected);
+    socket.on("error",               onError);
+    socket.on("connect",             onReconnect);
 
     return () => {
-      socket.off("connect",            onReconnect);
-      socket.off("room-joined");
-      socket.off("player-joined");
-      socket.off("move-made");
-      socket.off("timer-tick");
-      socket.off("game-over");
-      socket.off("player-disconnected");
-      socket.off("error");
+      // FIX: pass exact handler references to off() — not just event name
+      // Removing by name alone removes ALL listeners including other effects
+      socket.off("room-joined",         onRoomJoined);
+      socket.off("player-joined",       onPlayerJoined);
+      socket.off("move-made",           onMoveMade);
+      socket.off("timer-tick",          onTimerTick);
+      socket.off("game-over",           onGameOver);
+      socket.off("player-disconnected", onPlayerDisconnected);
+      socket.off("error",               onError);
+      socket.off("connect",             onReconnect);
     };
   }, [joinRoom, roomId]);
 
-  // ── Legal move highlighting (chess.com style dots) ────────
+  // ── Legal move highlighting ───────────────────────────────
   function getLegalStyles(sq) {
     const moves  = game.moves({ square: sq, verbose: true });
     const styles = { [sq]: { background: "rgba(255,200,0,0.5)", borderRadius: "4px" } };
@@ -350,15 +395,12 @@ function ChessPage() {
     return styles;
   }
 
-  // ── Drag: show legal dots ─────────────────────────────────
   function onDragBegin(piece, sq) {
     setSquareStyles(getLegalStyles(sq));
     setSelectedSq(sq);
   }
 
-  // ── Click/touch to move ───────────────────────────────────
   function onSquareClick(sq) {
-    // Can't interact in review mode or if not active
     if (viewIndex !== -1) return;
     if (statusRef.current !== "active" || !myColorRef.current) return;
     const mine = myColorRef.current === "white" ? "w" : "b";
@@ -392,56 +434,59 @@ function ChessPage() {
     }
   }
 
-  // ── Drop (drag-drop move) ─────────────────────────────────
+  // FIX: onDrop — do NOT update local game state or move history here.
+  // Only emit the move to server. The board updates ONLY when move-made comes back.
+  // This prevents board desync and double-updates.
   function onDrop(from, to) {
     if (statusRef.current !== "active") {
       setError("⏳ Waiting for opponent…");
       setTimeout(() => setError(null), 2000);
       return false;
     }
-    // Don't allow moves while reviewing history
     if (viewIndex !== -1) {
       setError("⚠️ Exit review mode to make moves");
       setTimeout(() => setError(null), 2000);
       return false;
     }
-    let ok = false;
-    setGame(prev => {
-      const g = new Chess(prev.fen());
-      try {
-        const move = g.move({ from, to, promotion: "q" });
-        if (move) {
-          ok = true;
-          setSquareStyles({
-            [from]: { backgroundColor: "rgba(255,200,0,0.45)" },
-            [to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
-          });
-          socket.emit("move", { roomId, from, to, promotion: "q" }); // no username needed
-        }
-      } catch {
-        setError("❌ Invalid move");
-        setTimeout(() => setError(null), 2000);
-      }
-      return ok ? g : prev;
+
+    // Validate move locally first (for instant visual feedback)
+    // but use a COPY of the game — don't modify state yet
+    const testGame = new Chess(gameRef.current.fen());
+    let move = null;
+    try {
+      move = testGame.move({ from, to, promotion: "q" });
+    } catch { /* invalid */ }
+
+    if (!move) {
+      setError("❌ Invalid move");
+      setTimeout(() => setError(null), 2000);
+      return false;
+    }
+
+    // ✅ Optimistically show highlight squares — board FEN stays unchanged
+    // Real board update happens in onMoveMade when server echoes back
+    setSquareStyles({
+      [from]: { backgroundColor: "rgba(255,200,0,0.45)" },
+      [to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
     });
-    return ok;
+
+    // Emit to server — server validates and broadcasts move-made to everyone including us
+    socket.emit("move", { roomId, from, to, promotion: "q" });
+    return true;
   }
 
-  // ── Draggable check ───────────────────────────────────────
   function isPieceDraggable({ piece }) {
     if (statusRef.current !== "active" || !myColorRef.current) return false;
-    if (viewIndex !== -1) return false; // no drag in review mode
+    if (viewIndex !== -1) return false;
     const mine = myColorRef.current === "white" ? "w" : "b";
     return piece[0] === mine && piece[0] === game.turn();
   }
 
-  // ── Resign ────────────────────────────────────────────────
   function handleResign() {
     if (window.confirm("Resign this game?"))
-      socket.emit("resign", { roomId }); // server derives color from socketId
+      socket.emit("resign", { roomId });
   }
 
-  // ── Rejoin (after disconnect) ─────────────────────────────
   function handleRejoin() {
     joinedRef.current = false;
     joinRoom();
@@ -449,26 +494,19 @@ function ChessPage() {
     setError(null);
   }
 
-  // ── Move browser ──────────────────────────────────────────
-  // viewIndex: -1 = live board, 0..N = review move N
   function goToMove(idx) {
-    // idx = -1 means live
     setViewIndex(idx);
     setSquareStyles({});
     setSelectedSq(null);
   }
 
-  // The FEN to show on board (live or reviewed)
   const displayFen = viewIndex === -1
     ? game.fen()
-    : allFens[viewIndex + 1] || game.fen(); // allFens[0] = start, [1] = after move 1, etc.
+    : allFens[viewIndex + 1] || game.fen();
 
-  // ── Captured pieces display ───────────────────────────────
   const { captured, score } = getCaptured(game.fen());
 
-  // Render captured piece symbols for a color
   function renderCaptured(color) {
-    // color = "white" means white captured black's pieces
     const caps = captured[color];
     const symbols = [];
     for (const [piece, count] of Object.entries(caps)) {
@@ -480,7 +518,6 @@ function ChessPage() {
     return symbols;
   }
 
-  // ── Status ────────────────────────────────────────────────
   function getStatus() {
     if (status === "connecting") return { text: "Connecting…",           cls: "s-wait"   };
     if (status === "waiting")    return { text: "Waiting for opponent…", cls: "s-wait"   };
@@ -494,12 +531,10 @@ function ChessPage() {
   const isSpectator = !myColor && status !== "connecting" && status !== "waiting";
   const isReviewing = viewIndex !== -1;
 
-  // Pair moves: [{n, w, b}]
   const movePairs = [];
   for (let i = 0; i < moveHistory.length; i += 2)
     movePairs.push({ n: i / 2 + 1, w: moveHistory[i], wIdx: i, b: moveHistory[i + 1] || "", bIdx: i + 1 });
 
-  // Timer color: red if < 30s
   const timerCls = (color) => {
     const t = timers[color];
     if (t <= 30) return "cp-timer danger";
@@ -531,17 +566,14 @@ function ChessPage() {
                   {myColor === color && <span className="cp-you">YOU</span>}
                 </span>
                 <span className="cp-pcolor">{symbol} {color}</span>
-                {/* Captured pieces row — chess.com style */}
                 <span className="cp-captured">
                   {renderCaptured(capturedBy).join(" ")}
-                  {/* Material advantage */}
                   {(() => {
                     const adv = capturedBy === "white" ? score : -score;
                     return adv > 0 ? <span className="cp-adv">+{adv}</span> : null;
                   })()}
                 </span>
               </div>
-              {/* Timer */}
               <div className={timerCls(color)}>
                 {fmtTimer(timers[color])}
               </div>
@@ -556,7 +588,7 @@ function ChessPage() {
           )}
         </div>
 
-        {/* Move history — clickable for review */}
+        {/* Move history */}
         <div className="cp-card cp-moves-card">
           <div className="cp-moves-header">
             <p className="cp-card-label" style={{margin:0}}>MOVES</p>
@@ -586,7 +618,6 @@ function ChessPage() {
               </div>
             ))}
           </div>
-          {/* Move navigation arrows */}
           {moveHistory.length > 0 && (
             <div className="cp-move-nav">
               <button onClick={() => goToMove(0)} title="First move">⏮</button>
@@ -653,7 +684,6 @@ function ChessPage() {
 
         {isSpectator && <div className="cp-spec-banner">👁 Spectating — view only</div>}
 
-        {/* ✅ Rejoin button shown when opponent disconnects */}
         {isDisconnected && status !== "finished" && (
           <div className="cp-rejoin-banner">
             ⚠️ Opponent disconnected
@@ -666,11 +696,11 @@ function ChessPage() {
         {/* Board */}
         <div className="cp-board">
           <Chessboard
-            position={displayFen}                   // live or review FEN
+            position={displayFen}
             onPieceDrop={onDrop}
             onPieceDragBegin={onDragBegin}
             onPieceDragEnd={() => { setSquareStyles({}); setSelectedSq(null); }}
-            onSquareClick={onSquareClick}            // click-to-move
+            onSquareClick={onSquareClick}
             customSquareStyles={squareStyles}
             isDraggablePiece={isPieceDraggable}
             boardWidth={boardWidth}

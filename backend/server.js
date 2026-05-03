@@ -37,6 +37,11 @@ const io = new Server(httpServer, {
   cors: { origin: allowedOrigins, methods: ["GET", "POST"], credentials: true },
 });
 
+// ── Issue 9: track one socket per userId ─────────────────────
+// If the same user opens a second tab, disconnect the old socket
+// so they can't hold two seats in the same room simultaneously.
+const connectedUsers = new Map(); // userId → socketId
+
 // ── Socket JWT middleware (fix #1) ────────────────────────────
 // Authenticate every socket connection with the JWT token.
 // Attaches socket.user = { id, username } for use in handlers.
@@ -54,10 +59,32 @@ io.use(async (socket, next) => {
     if (!user) return next(new Error("unauthorized: user not found"));
 
     socket.user = { id: decoded.id, username: user.username };
+
+    // Issue 9: if this userId already has a socket, disconnect the old one
+    const existingSocketId = connectedUsers.get(decoded.id.toString());
+    if (existingSocketId && existingSocketId !== socket.id) {
+      const oldSocket = io.sockets.sockets.get(existingSocketId);
+      if (oldSocket) {
+        oldSocket.emit("error", { message: "Signed in from another tab. Disconnecting this session." });
+        oldSocket.disconnect(true);
+      }
+    }
+    connectedUsers.set(decoded.id.toString(), socket.id);
+
     next();
   } catch (e) {
     next(new Error("unauthorized: invalid token"));
   }
+});
+
+// Clean up connectedUsers map when socket disconnects
+io.on("connection", (socket) => {
+  socket.on("disconnect", () => {
+    const userId = socket.user?.id?.toString();
+    if (userId && connectedUsers.get(userId) === socket.id) {
+      connectedUsers.delete(userId);
+    }
+  });
 });
 
 // ── Middleware ────────────────────────────────────────────────

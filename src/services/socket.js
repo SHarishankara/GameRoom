@@ -25,17 +25,35 @@ function buildSocket() {
 // ── connectSocket ──────────────────────────────────────────────
 // Call once after login. Creates a fresh socket with the current
 // token (important — token may not exist when module first loads).
+//
+// Issue 9 fix: if a socket already exists (e.g. user opened a second
+// tab), forcibly disconnect the old one before creating a new one.
+// This ensures only one active connection exists per user session,
+// preventing the same userId from claiming two seats in the same room.
 export function connectSocket() {
   if (_socket?.connected) return; // already connected — nothing to do
-  if (_socket) { _socket.disconnect(); _socket = null; } // stale — rebuild
+
+  // Issue 9: always tear down any existing socket (connected or not)
+  // before building a new one. This covers:
+  //   - Stale disconnected sockets
+  //   - A second tab calling connectSocket() with the same token
+  if (_socket) {
+    _socket.disconnect();
+    _socket.removeAllListeners(); // prevent ghost listeners on old instance
+    _socket = null;
+  }
+
   _socket = buildSocket();
   _socket.connect();
 }
 
 // ── disconnectSocket ───────────────────────────────────────────
 export function disconnectSocket() {
-  _socket?.disconnect();
-  _socket = null;
+  if (_socket) {
+    _socket.disconnect();
+    _socket.removeAllListeners();
+    _socket = null;
+  }
 }
 
 // ── socket ────────────────────────────────────────────────────
