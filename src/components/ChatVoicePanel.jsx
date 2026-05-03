@@ -256,6 +256,7 @@ function ChatVoicePanel({ roomId, username }) {
       const audio = new Audio();
       audio.srcObject = e.streams[0];
       audio.autoplay  = true;
+      audio.play().catch(() => {});
       const u = vuRef.current.find(u => u.socketId === remoteId);
       audio.volume = u?.volume ?? 1.0;
       audio.muted  = u?.muted  ?? false;
