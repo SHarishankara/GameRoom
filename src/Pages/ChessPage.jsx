@@ -482,7 +482,7 @@ const onMoveMade = (data) => {
 
 
   gameRef.current = testGame;
-  setGame(new Chess(testGame.fen()));
+  setGame(testGame); // Optimistically update UI for instant response
 
     // ✅ Optimistically show highlight squares — board FEN stays unchanged
     // Real board update happens in onMoveMade when server echoes back
