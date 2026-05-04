@@ -82,6 +82,7 @@ function registerSocketHandlers(io) {
 
         let assignedColor = null;
         let role          = "player";
+        let isNewBlack    = false; // ✅ FIX: track new black player
 
         const whiteId = game.whitePlayer?.userId?.toString();
         const blackId = game.blackPlayer?.userId?.toString();
@@ -95,6 +96,7 @@ function registerSocketHandlers(io) {
         } else if (!game.blackPlayer?.userId) {
           // First new player claims black
           assignedColor = "black";
+          isNewBlack    = true; // ✅ FIX: mark before DB update
           room.players.black = { username, userId: myId, socketId: socket.id };
           await Game.findOneAndUpdate({ roomId }, {
             blackPlayer: { userId: myId, username },
@@ -137,7 +139,7 @@ function registerSocketHandlers(io) {
           players:        room.players,
           spectatorCount: room.spectators.length,
           chat:           room.chat.slice(-100),  // last 100 messages (fix #3)
-          status:         game.blackPlayer?.userId ? "active" : game.status,
+          status:         isNewBlack ? "active" : (game.blackPlayer?.userId ? "active" : game.status), // ✅ FIX: use flag not stale game doc
           timers:         room.timers,
           // Full move list so client can reconstruct history (fix rejoin)
           moves:          game.moves.map(m => ({ from: m.from, to: m.to, san: m.san, fen: m.fen })),
@@ -229,7 +231,7 @@ function registerSocketHandlers(io) {
 
     // ── VOICE ─────────────────────────────────────────────────
 socket.on("voice-join", ({ roomId }) => {
-  socket.join(roomId); // 🔥 MUST HAVE (this is your bug)
+  socket.join(roomId); // ✅ CRITICAL FIX
 
   socket.to(roomId).emit("voice-user-joined", {
     socketId: socket.id,
@@ -243,7 +245,7 @@ socket.on("voice-join", ({ roomId }) => {
       room.players.black,
       ...room.spectators
     ]
-      .filter(u => u && u.socketId && u.socketId !== socket.id)
+      .filter(Boolean)
       .map(u => ({ ...u }));
 
     socket.emit("room-users", users);
