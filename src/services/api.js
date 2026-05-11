@@ -75,4 +75,77 @@ export const api = {
     });
     return res.json();
   },
+
+  // ── NEW BELOW — added for new features ───────────────────
+
+  // ── GET /api/game/leaderboard ────────────────────────────
+  // Feature 4: Returns top 20 players sorted by ELO rating.
+  // Public endpoint — no token needed.
+  leaderboard: async () => {
+    const res = await fetch(`${BASE_URL}/game/leaderboard`);
+    return res.json();
+  },
+
+  // ── GET /api/game/profile/:username ──────────────────────
+  // Feature 4: Public profile — username, ELO, wins, losses.
+  profile: async (username) => {
+    const res = await fetch(`${BASE_URL}/game/profile/${username}`);
+    return res.json();
+  },
+
+  // ── GET /api/game/queue-size ─────────────────────────────
+  // Feature 5: Returns how many players are currently searching.
+  // Commented out — uncomment when matchmaking is enabled.
+  // queueSize: async () => {
+  //   const res = await fetch(`${BASE_URL}/game/queue-size`);
+  //   return res.json();
+  // },
+
+  // ── GET /api/friends ─────────────────────────────────────
+  // Friends: Returns the logged-in user's friends list with ELO.
+  getFriends: async (token) => {
+    const res = await fetch(`${BASE_URL}/friends`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.json();
+  },
+
+  // ── GET /api/friends/requests ────────────────────────────
+  // Friends: Returns incoming friend requests waiting for acceptance.
+  getFriendRequests: async (token) => {
+    const res = await fetch(`${BASE_URL}/friends/requests`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.json();
+  },
+
+  // ── POST /api/friends/request/:userId ────────────────────
+  // Friends: Send a friend request to another user by their ID.
+  sendFriendRequest: async (token, userId) => {
+    const res = await fetch(`${BASE_URL}/friends/request/${userId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.json();
+  },
+
+  // ── POST /api/friends/accept/:userId ─────────────────────
+  // Friends: Accept an incoming friend request.
+  acceptFriend: async (token, userId) => {
+    const res = await fetch(`${BASE_URL}/friends/accept/${userId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.json();
+  },
+
+  // ── POST /api/friends/remove/:userId ─────────────────────
+  // Friends: Remove an existing friend (both sides unfriended).
+  removeFriend: async (token, userId) => {
+    const res = await fetch(`${BASE_URL}/friends/remove/${userId}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return res.json();
+  },
 };

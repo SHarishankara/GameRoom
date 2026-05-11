@@ -1,0 +1,91 @@
+/* MatchmakingPage.css */
+.mm-page {
+  min-height: 100vh;
+  background: #0a0a0f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Rajdhani', Arial, sans-serif;
+  color: #e8e8f0;
+  position: relative;
+}
+
+.mm-back {
+  position: absolute;
+  top: 20px; left: 20px;
+  background: transparent;
+  border: 1px solid #2a2a3a;
+  color: #6b6b80;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: 0.2s;
+}
+.mm-back:hover { border-color: #FF6B00; color: #FF6B00; }
+
+.mm-card {
+  background: #16161f;
+  border: 1px solid #2a2a3a;
+  border-radius: 16px;
+  padding: 48px 40px;
+  text-align: center;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 0 60px rgba(255,107,0,0.08);
+}
+
+.mm-icon { font-size: 3rem; margin-bottom: 12px; }
+.mm-title { font-size: 1.8rem; color: #FF6B00; margin: 0 0 8px; letter-spacing: 1px; }
+.mm-elo   { color: #9ca3af; font-size: 14px; margin: 0 0 4px; }
+.mm-elo strong { color: #f5c842; }
+.mm-queue-info { color: #6b6b80; font-size: 13px; margin: 0 0 28px; }
+
+.mm-btn {
+  width: 100%;
+  padding: 14px;
+  background: #FF6B00;
+  color: #000;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+  letter-spacing: 0.5px;
+}
+.mm-btn:hover { background: #ff8c35; box-shadow: 0 6px 20px rgba(255,107,0,0.35); }
+
+/* Searching state */
+.mm-searching { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+.mm-pulse {
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  border: 3px solid #FF6B00;
+  animation: mmPulse 1.2s ease-in-out infinite;
+}
+@keyframes mmPulse {
+  0%,100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255,107,0,0.4); }
+  50%      { transform: scale(1.15); opacity: 0.8; box-shadow: 0 0 0 16px rgba(255,107,0,0); }
+}
+
+.mm-wait { font-size: 1.2rem; font-weight: 700; color: #FF6B00; margin: 0; }
+.mm-hint { font-size: 12px; color: #6b6b80; margin: 0; }
+
+.mm-cancel {
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid #f87171;
+  color: #f87171;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: 0.2s;
+}
+.mm-cancel:hover { background: rgba(248,113,113,0.1); }
+
+/* Found state */
+.mm-found { display: flex; flex-direction: column; gap: 6px; }
+.mm-found-text { font-size: 1.4rem; font-weight: 700; color: #4ade80; }
+.mm-redirect { font-size: 12px; color: #6b6b80; margin-top: 8px; }

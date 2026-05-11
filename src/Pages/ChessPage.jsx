@@ -127,7 +127,7 @@ function saveChatMsg(roomId, msg) {
 // ChessPage Component
 // ─────────────────────────────────────────────────────────────
 function ChessPage() {
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
   const { roomId } = useParams();
 
   const user     = JSON.parse(localStorage.getItem("user") || "{}");
@@ -135,25 +135,25 @@ function ChessPage() {
   const userId   = user.id || username;
 
   // ── Chess state ───────────────────────────────────────────
-  const [game, setGame]               = useState(new Chess());
-  const [boardTheme, setBoardTheme]   = useState("classic");
+  const [game, setGame]                 = useState(new Chess());
+  const [boardTheme, setBoardTheme]     = useState("classic");
   const [squareStyles, setSquareStyles] = useState({});
-  const [selectedSq, setSelectedSq]   = useState(null);
-  // FIX: moveHistory stores {san, from, to} objects so we can track each move properly
-  const [moveHistory, setMoveHistory] = useState([]); // array of SAN strings
-  const [allFens, setAllFens]         = useState(["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]);
-  const [viewIndex, setViewIndex]     = useState(-1);
-  const [error, setError]             = useState(null);
+  const [selectedSq, setSelectedSq]     = useState(null);
+  // FIX: moveHistory stores SAN strings built incrementally
+  const [moveHistory, setMoveHistory]   = useState([]);
+  const [allFens, setAllFens]           = useState(["rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"]);
+  const [viewIndex, setViewIndex]       = useState(-1);
+  const [error, setError]               = useState(null);
 
   // ── Room state ────────────────────────────────────────────
-  const [myColor, setMyColor]         = useState(null);
-  const [status, setStatus]           = useState("connecting");
-  const [players, setPlayers]         = useState({ white: null, black: null });
+  const [myColor, setMyColor]               = useState(null);
+  const [status, setStatus]                 = useState("connecting");
+  const [players, setPlayers]               = useState({ white: null, black: null });
   const [spectatorCount, setSpectatorCount] = useState(0);
-  const [gameOverMsg, setGameOverMsg] = useState(null);
+  const [gameOverMsg, setGameOverMsg]       = useState(null);
   const [isDisconnected, setIsDisconnected] = useState(false);
-  const [copied, setCopied]           = useState(false);
-  const [codeCopied, setCodeCopied]   = useState(false);
+  const [copied, setCopied]                 = useState(false);
+  const [codeCopied, setCodeCopied]         = useState(false);
 
   // ── Timer state ───────────────────────────────────────────
   const [timers, setTimers] = useState({ white: 600, black: 600 });
@@ -163,15 +163,26 @@ function ChessPage() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   // ── Board width (responsive) ──────────────────────────────
-  const [boardWidth, setBoardWidth]   = useState(480);
+  const [boardWidth, setBoardWidth] = useState(480);
+
+  // ── Feature 4: ELO delta shown after game ends ────────────
+  // Server sends { white: +14, black: -14 } in game-over event
+  const [eloDeltas, setEloDeltas] = useState(null);
+
+  // ── Feature 7: Rematch ────────────────────────────────────
+  // rematchOffered  — opponent clicked Rematch, show Accept button
+  // rematchRequested — I clicked Rematch, waiting for opponent
+  const [rematchOffered, setRematchOffered]     = useState(false);
+  const [rematchRequested, setRematchRequested] = useState(false);
+  const [rematchLoading, setRematchLoading]     = useState(false);
 
   // ── Refs ──────────────────────────────────────────────────
-  const myColorRef  = useRef(null);
-  const statusRef   = useRef("connecting");
-  const joinedRef   = useRef(false);
+  const myColorRef    = useRef(null);
+  const statusRef     = useRef("connecting");
+  const joinedRef     = useRef(false);
   const lowTimePlayed = useRef(false);
   // FIX: store the live game in a ref so socket handlers always see latest FEN
-  const gameRef     = useRef(new Chess());
+  const gameRef = useRef(new Chess());
 
   const shareLink = `${window.location.origin}/chess/${roomId}`;
 
@@ -251,8 +262,8 @@ function ChessPage() {
       // ── FIX: Rebuild move history by replaying moves (not from Chess FEN)
       // Chess.js built from a FEN has no history — must replay from move list
       if (data.moves && data.moves.length > 0) {
-        const g = new Chess(); // start from initial position
-        const fens = [g.fen()];
+        const g       = new Chess(); // start from initial position
+        const fens    = [g.fen()];
         const history = [];
         for (const m of data.moves) {
           try {
@@ -288,7 +299,7 @@ function ChessPage() {
       setStatus(data?.status || "active");
       // ✅ Always update players so white sees black's name immediately
       if (data?.players) setPlayers(data.players);
-      if (data?.timers) setTimers(data.timers);
+      if (data?.timers)  setTimers(data.timers);
       setIsDisconnected(false);
     };
 
@@ -296,53 +307,53 @@ function ChessPage() {
     // Do NOT optimistically update board. Only update from this event.
     // FIX: move history must be maintained incrementally, not rebuilt from Chess(fen).history()
     // because Chess(fen) has no history — it's a snapshot.
-const onMoveMade = (data) => {
-  const currentFen = gameRef.current.fen();
+    const onMoveMade = (data) => {
+      const currentFen = gameRef.current.fen();
 
-  // 🔥 1. Skip everything if it's your own move (already updated instantly)
-  if (currentFen === data.fen) return;
+      // 🔥 1. Skip everything if it's your own move (already updated instantly)
+      if (currentFen === data.fen) return;
 
-  // 🔥 2. Only opponent moves reach here
+      // 🔥 2. Only opponent moves reach here
 
-  // Update move history + FEN list
-  setAllFens(prev => {
-    if (prev[prev.length - 1] === data.fen) return prev;
-    return [...prev, data.fen];
-  });
+      // Update move history + FEN list
+      setAllFens(prev => {
+        if (prev[prev.length - 1] === data.fen) return prev;
+        return [...prev, data.fen];
+      });
 
-  if (data.san) {
-    setMoveHistory(prev => [...prev, data.san]);
-  }
+      if (data.san) {
+        setMoveHistory(prev => [...prev, data.san]);
+      }
 
-  // Update board state
-  const g = new Chess(data.fen);
-  gameRef.current = g;
-  setGame(g);
+      // Update board state
+      const g = new Chess(data.fen);
+      gameRef.current = g;
+      setGame(g);
 
-  // UI updates
-  setViewIndex(-1);
+      // UI updates
+      setViewIndex(-1);
+      setSquareStyles({
+        [data.from]: { backgroundColor: "rgba(255,200,0,0.45)" },
+        [data.to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
+      });
+      setSelectedSq(null);
+      setError(null);
 
-  setSquareStyles({
-    [data.from]: { backgroundColor: "rgba(255,200,0,0.45)" },
-    [data.to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
-  });
+      if (data.timers) setTimers(data.timers);
 
-  setSelectedSq(null);
-  setError(null);
-
-  if (data.timers) setTimers(data.timers);
-
-  // Sounds
-  if (data.isCheck)        playSound("check");
-  else if (data.isCapture) playSound("capture");
-  else                     playSound("move");
-};
+      // Sounds
+      if (data.isCheck)        playSound("check");
+      else if (data.isCapture) playSound("capture");
+      else                     playSound("move");
+    };
 
     const onTimerTick = ({ timers }) => {
       setTimers(timers);
     };
 
-    const onGameOver = ({ winner, endReason }) => {
+    // ── Feature 4: game-over now receives eloDeltas from server ──
+    // eloDeltas = { white: +14, black: -14 } — shown in banner after game ends
+    const onGameOver = ({ winner, endReason, eloDeltas: deltas }) => {
       statusRef.current = "finished";
       setStatus("finished");
       playSound("gameover");
@@ -354,6 +365,8 @@ const onMoveMade = (data) => {
           : winner === color  ? "You won 🏆"
           : "You lost 😔"
       );
+      // Store ELO deltas to show +/- in the UI
+      if (deltas) setEloDeltas(deltas);
     };
 
     const onPlayerDisconnected = ({ color }) => {
@@ -372,6 +385,20 @@ const onMoveMade = (data) => {
       joinRoom();
     };
 
+    // ── Feature 7: Rematch socket events ─────────────────────
+    // Server emits "rematch-offered" when opponent clicks Rematch
+    const onRematchOffered = ({ by }) => {
+      // Only show the Accept button to the OTHER player
+      if (by !== myColorRef.current) setRematchOffered(true);
+    };
+
+    // Server emits "rematch-ready" when both players have agreed
+    // Navigate to the new room — colors are flipped automatically
+    const onRematchReady = ({ newRoomId }) => {
+      setRematchLoading(false);
+      navigate(`/chess/${newRoomId}`);
+    };
+
     // Register all handlers
     socket.on("room-joined",         onRoomJoined);
     socket.on("player-joined",       onPlayerJoined);
@@ -381,6 +408,8 @@ const onMoveMade = (data) => {
     socket.on("player-disconnected", onPlayerDisconnected);
     socket.on("error",               onError);
     socket.on("connect",             onReconnect);
+    socket.on("rematch-offered",     onRematchOffered); // Feature 7
+    socket.on("rematch-ready",       onRematchReady);   // Feature 7
 
     return () => {
       // FIX: pass exact handler references to off() — not just event name
@@ -393,8 +422,10 @@ const onMoveMade = (data) => {
       socket.off("player-disconnected", onPlayerDisconnected);
       socket.off("error",               onError);
       socket.off("connect",             onReconnect);
+      socket.off("rematch-offered",     onRematchOffered); // Feature 7
+      socket.off("rematch-ready",       onRematchReady);   // Feature 7
     };
-  }, [joinRoom, roomId]);
+  }, [joinRoom, roomId, navigate]);
 
   // ── Legal move highlighting ───────────────────────────────
   function getLegalStyles(sq) {
@@ -448,9 +479,9 @@ const onMoveMade = (data) => {
     }
   }
 
-  // FIX: onDrop — do NOT update local game state or move history here.
-  // Only emit the move to server. The board updates ONLY when move-made comes back.
-  // This prevents board desync and double-updates.
+  // FIX: onDrop — validate locally for instant feedback, then emit to server.
+  // The board updates ONLY when move-made comes back from server.
+  // onMoveMade skips the update if FEN already matches (own move already applied).
   function onDrop(from, to) {
     if (statusRef.current !== "active") {
       setError("⏳ Waiting for opponent…");
@@ -477,15 +508,11 @@ const onMoveMade = (data) => {
       return false;
     }
 
-    // 🔥 INSTANT UI UPDATE
+    // 🔥 INSTANT UI UPDATE — apply move optimistically so board feels instant
+    gameRef.current = testGame;
+    setGame(testGame);
 
-
-
-  gameRef.current = testGame;
-  setGame(testGame); // Optimistically update UI for instant response
-
-    // ✅ Optimistically show highlight squares — board FEN stays unchanged
-    // Real board update happens in onMoveMade when server echoes back
+    // Show highlight squares immediately
     setSquareStyles({
       [from]: { backgroundColor: "rgba(255,200,0,0.45)" },
       [to]:   { backgroundColor: "rgba(255,200,0,0.45)" },
@@ -519,6 +546,22 @@ const onMoveMade = (data) => {
     setViewIndex(idx);
     setSquareStyles({});
     setSelectedSq(null);
+  }
+
+  // ── Feature 7: Rematch handlers ───────────────────────────
+  // I click Rematch — tell server, wait for opponent to also click
+  function handleRematch() {
+    setRematchRequested(true);
+    setRematchLoading(true);
+    socket.emit("rematch-request", { roomId });
+  }
+
+  // Opponent offered, I click Accept — emit same event, server sees both votes
+  function handleAcceptRematch() {
+    setRematchOffered(false);
+    setRematchRequested(true);
+    setRematchLoading(true);
+    socket.emit("rematch-request", { roomId });
   }
 
   const displayFen = viewIndex === -1
@@ -644,7 +687,7 @@ const onMoveMade = (data) => {
               <button onClick={() => goToMove(0)} title="First move">⏮</button>
               <button onClick={() => goToMove(Math.max(0, (viewIndex === -1 ? moveHistory.length - 1 : viewIndex) - 1))} title="Previous">◀</button>
               <button onClick={() => {
-                const cur = viewIndex === -1 ? moveHistory.length - 1 : viewIndex;
+                const cur  = viewIndex === -1 ? moveHistory.length - 1 : viewIndex;
                 const next = cur + 1;
                 if (next >= moveHistory.length) goToMove(-1);
                 else goToMove(next);
@@ -703,6 +746,31 @@ const onMoveMade = (data) => {
           <div className={`cp-status ${st.cls}`}>{st.text}</div>
         )}
 
+        {/* Feature 4: ELO delta banner — shown after game ends */}
+        {status === "finished" && eloDeltas && myColor && (
+          <div className="cp-elo-delta">
+            ELO:{" "}
+            <span className={eloDeltas[myColor] >= 0 ? "elo-gain" : "elo-loss"}>
+              {eloDeltas[myColor] >= 0 ? "+" : ""}{eloDeltas[myColor]}
+            </span>
+          </div>
+        )}
+
+        {/* Feature 7: Rematch banners — only shown to players, not spectators */}
+        {status === "finished" && myColor && rematchOffered && !rematchRequested && (
+          <div className="cp-rematch-banner">
+            Opponent wants a rematch!
+            <button className="cp-rematch-btn" onClick={handleAcceptRematch}>
+              ✅ Accept
+            </button>
+          </div>
+        )}
+        {status === "finished" && myColor && rematchRequested && (
+          <div className="cp-rematch-banner waiting">
+            {rematchLoading ? "Setting up rematch…" : "Waiting for opponent…"}
+          </div>
+        )}
+
         {isSpectator && <div className="cp-spec-banner">👁 Spectating — view only</div>}
 
         {isDisconnected && status !== "finished" && (
@@ -737,6 +805,14 @@ const onMoveMade = (data) => {
           {status === "active" && myColor && !isReviewing && (
             <button className="cp-btn cp-resign" onClick={handleResign}>🏳️ Resign</button>
           )}
+
+          {/* Feature 7: Rematch button — only before either player has voted */}
+          {status === "finished" && myColor && !rematchRequested && !rematchOffered && (
+            <button className="cp-btn cp-rematch" onClick={handleRematch}>
+              🔁 Rematch
+            </button>
+          )}
+
           {status === "finished" && (
             <button className="cp-btn cp-home" onClick={() => navigate("/")}>🏠 Back to Lobby</button>
           )}

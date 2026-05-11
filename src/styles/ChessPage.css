@@ -391,3 +391,82 @@
   .cp-main    { padding: 14px; }
   .cp-board   { border-radius: 8px; }
 }
+
+/* ChessPage.css — copy your existing file and ADD these at the bottom */
+
+/* ── Feature 4: ELO delta banner ──────────────────── */
+.cp-elo-delta {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.elo-gain { color: #4ade80; }
+.elo-loss { color: #f87171; }
+
+/* ── Feature 7: Rematch banners ───────────────────── */
+.cp-rematch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255,107,0,0.1);
+  border: 1px solid rgba(255,107,0,0.35);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #FF6B00;
+  margin-bottom: 10px;
+}
+.cp-rematch-banner.waiting {
+  background: rgba(107,107,128,0.1);
+  border-color: var(--border);
+  color: var(--muted);
+}
+.cp-rematch-btn {
+  padding: 6px 14px;
+  background: #FF6B00;
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+.cp-rematch-btn:hover { background: #ff8c35; }
+
+/* ── Rematch bottom button ─────────────────────────── */
+.cp-rematch {
+  background: rgba(255,107,0,0.15);
+  color: #FF6B00;
+  border: 1px solid #FF6B00;
+}
+.cp-rematch:hover { background: rgba(255,107,0,0.28); }
+
+/* ── Rejoin banner (if not already in your CSS) ────── */
+.cp-rejoin-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.25);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: #f87171;
+  margin-bottom: 10px;
+}
+.cp-rejoin-btn {
+  padding: 5px 12px;
+  background: rgba(248,113,113,0.15);
+  color: #f87171;
+  border: 1px solid #f87171;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}

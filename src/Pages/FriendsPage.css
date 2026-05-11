@@ -1,0 +1,25 @@
+.fr-page { min-height:100vh; background:#0a0a0f; display:flex; align-items:center; justify-content:center; font-family:'Rajdhani',Arial,sans-serif; color:#e8e8f0; }
+.fr-card { background:#16161f; border:1px solid #2a2a3a; border-radius:16px; padding:36px 32px; width:100%; max-width:480px; }
+.fr-back { background:transparent; border:1px solid #2a2a3a; color:#6b6b80; padding:7px 14px; border-radius:8px; cursor:pointer; font-size:13px; margin-bottom:20px; display:inline-block; transition:0.2s; }
+.fr-back:hover { border-color:#FF6B00; color:#FF6B00; }
+.fr-title { font-size:1.8rem; color:#FF6B00; margin:0 0 20px; }
+.fr-search-row { display:flex; gap:8px; margin-bottom:12px; }
+.fr-input { flex:1; background:#111; border:1px solid #2a2a3a; border-radius:8px; padding:10px 14px; color:#e8e8f0; font-size:14px; outline:none; }
+.fr-input:focus { border-color:#FF6B00; }
+.fr-btn-orange { background:#FF6B00; color:#000; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:700; cursor:pointer; }
+.fr-btn-orange:hover { background:#ff8c35; }
+.fr-msg { color:#fbbf24; font-size:13px; margin:4px 0; }
+.fr-result { display:flex; align-items:center; gap:10px; background:#1a1a24; border:1px solid #FF6B00; border-radius:10px; padding:10px 14px; margin-bottom:12px; }
+.fr-rname { flex:1; font-weight:600; }
+.fr-relo { font-size:12px; color:#6b6b80; }
+.fr-section { font-size:11px; font-weight:700; letter-spacing:2px; color:#6b6b80; margin:16px 0 8px; text-transform:uppercase; }
+.fr-empty { color:#6b6b80; font-size:13px; text-align:center; padding:12px 0; }
+.fr-row { display:flex; align-items:center; gap:10px; background:#1a1a24; border:1px solid #2a2a3a; border-radius:10px; padding:10px 14px; margin-bottom:8px; }
+.fr-av { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#FF6B00,#ff8c35); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; flex-shrink:0; }
+.fr-info { flex:1; display:flex; flex-direction:column; gap:2px; }
+.fr-name { font-size:14px; font-weight:600; }
+.fr-elo { font-size:11px; color:#6b6b80; }
+.fr-btn-sm { padding:5px 12px; border:none; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; transition:0.2s; }
+.fr-btn-sm.green { background:rgba(74,222,128,0.15); color:#4ade80; border:1px solid #4ade80; }
+.fr-btn-sm.red   { background:rgba(248,113,113,0.12); color:#f87171; border:1px solid #f87171; }
+.fr-btn-sm:not(.green):not(.red) { background:#FF6B00; color:#000; }

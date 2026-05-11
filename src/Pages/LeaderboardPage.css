@@ -1,0 +1,48 @@
+.lb-page {
+  min-height: 100vh;
+  background: #0a0a0f;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Rajdhani', Arial, sans-serif;
+  color: #e8e8f0;
+}
+.lb-card {
+  background: #16161f;
+  border: 1px solid #2a2a3a;
+  border-radius: 16px;
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 500px;
+}
+.lb-back {
+  background: transparent; border: 1px solid #2a2a3a; color: #6b6b80;
+  padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; transition: 0.2s;
+  margin-bottom: 20px; display: inline-block;
+}
+.lb-back:hover { border-color: #FF6B00; color: #FF6B00; }
+.lb-title { font-size: 1.8rem; color: #f5c842; margin: 0 0 4px; }
+.lb-sub   { color: #6b6b80; font-size: 13px; margin: 0 0 24px; }
+.lb-loading, .lb-empty { text-align: center; color: #6b6b80; padding: 20px 0; }
+
+.lb-list { display: flex; flex-direction: column; gap: 8px; }
+
+.lb-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 80px 90px;
+  align-items: center;
+  gap: 8px;
+  background: #1a1a24;
+  border: 1px solid #2a2a3a;
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: 0.2s;
+}
+.lb-row:hover { border-color: #FF6B00; }
+.lb-me { border-color: #f5c842 !important; background: rgba(245,200,66,0.06); }
+
+.lb-rank { font-size: 16px; font-weight: 700; text-align: center; }
+.lb-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.lb-you  { font-size: 9px; background: #FF6B00; color: #000; padding: 1px 5px; border-radius: 4px; font-weight: 700; }
+.lb-elo  { font-size: 15px; font-weight: 700; color: #f5c842; text-align: right; }
+.lb-record { font-size: 12px; color: #6b6b80; text-align: right; }

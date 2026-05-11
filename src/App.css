@@ -1,4 +1,4 @@
-/* src/App.css */
+/* src/App.css — original styles UNCHANGED, new ones added at bottom */
 
 .screen {
   max-width: 600px;
@@ -22,6 +22,32 @@
   font-size: 14px;
   font-weight: bold;
 }
+
+/* Feature 4: ELO shown in user bar */
+.user-elo {
+  font-size: 12px;
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+/* Nav buttons group (leaderboard + friends + logout) */
+.user-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-btn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  color: white;
+  padding: 5px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: 0.2s;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.28); }
 
 .logout-btn {
   background: rgba(255,255,255,0.15);
@@ -77,14 +103,15 @@
 .game-name { font-size: 18px; font-weight: bold; margin-bottom: 4px; }
 .game-info { font-size: 14px; color: #555; margin-bottom: 10px; }
 
-/* ── Two buttons side by side ── */
 .game-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .create-room-btn {
   flex: 1;
+  min-width: 120px;
   padding: 9px 14px;
   background: #1e3a8a;
   color: white;
@@ -98,9 +125,9 @@
 .create-room-btn:hover:not(:disabled) { background: #2d52b8; }
 .create-room-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* ── Join with code button ── */
 .join-room-btn {
   flex: 1;
+  min-width: 120px;
   padding: 9px 14px;
   background: #FF6B00;
   color: #000;
@@ -112,5 +139,21 @@
   transition: 0.2s;
 }
 .join-room-btn:hover { background: #FF8C00; }
+
+/* Feature 5: Find Match button */
+.find-match-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 9px 14px;
+  background: #7c3aed;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: 0.2s;
+}
+.find-match-btn:hover { background: #6d28d9; }
 
 .no-result { text-align: center; color: #888; font-size: 16px; }
