@@ -1,21 +1,25 @@
 // src/App.jsx
 // Changes vs original:
-//   - Added routes: /matchmaking, /leaderboard, /friends, /auth/callback
-//   - Feature 6: /chess/:roomId checks auth and stores pendingRoom in sessionStorage
-//   - Home: added Find Match + Leaderboard + Friends buttons
+//   - Added routes: /leaderboard, /friends, /auth/callback
+//   - Feature 6: /chess/:roomId handles unauthenticated invite links
+//   - Home: added Leaderboard + Friends nav buttons
 //   - Home: shows ELO in user bar
+//   - Matchmaking route commented out — uncomment when ready
 //   - ALL existing logic is unchanged
 
 import { useState } from "react";
 import "./App.css";
 import { Routes, Route, Navigate, useNavigate, useParams } from "react-router-dom";
-import ChessPage        from "./pages/ChessPage.jsx";
-import AuthPage, { OAuthCallback } from "./pages/AuthPage.jsx";
-import JoinPage         from "./pages/JoinPage.jsx";
-import MatchmakingPage  from "./pages/MatchmakingPage.jsx";
-import LeaderboardPage  from "./pages/LeaderboardPage.jsx";
-import FriendsPage      from "./pages/FriendsPage.jsx";
-import { api }          from "./services/api";
+
+// ── Page imports — "Pages" is capital P in this project ──────
+import ChessPage                    from "./Pages/ChessPage.jsx";
+import AuthPage, { OAuthCallback }  from "./Pages/AuthPage.jsx";
+import JoinPage                     from "./Pages/JoinPage.jsx";
+import LeaderboardPage              from "./Pages/LeaderboardPage.jsx";
+import FriendsPage                  from "./Pages/FriendsPage.jsx";
+// import MatchmakingPage           from "./Pages/MatchmakingPage.jsx"; // Feature 5 — uncomment when ready
+
+import { api } from "./services/api";
 
 // ── ProtectedRoute (unchanged) ────────────────────────────────
 function ProtectedRoute({ children }) {
@@ -26,13 +30,13 @@ function ProtectedRoute({ children }) {
 
 // ── Feature 6: InviteRoute ────────────────────────────────────
 // Handles /chess/:roomId when user is NOT logged in.
-// Saves the roomId so AuthPage redirects back after login.
+// Saves the roomId in sessionStorage so AuthPage can redirect
+// back to the correct room immediately after login.
 function InviteRoute() {
   const { roomId } = useParams();
   const token      = localStorage.getItem("token");
 
   if (!token) {
-    // Store room to return to after login
     sessionStorage.setItem("pendingRoom", roomId);
     return <Navigate to="/auth" replace />;
   }
@@ -51,11 +55,11 @@ function Home() {
 
   // Unchanged game catalogue
   const allGames = [
-    { name: "Chess",           info: "2 players, up to 10 spectators",              trending: true,  mutual: false },
-    { name: "Snake and Ladder",info: "8 players, up to 10 spectators",              trending: true,  mutual: true  },
-    { name: "Carrom",          info: "4 players, up to 10 spectators",              trending: false, mutual: true  },
-    { name: "Ludo",            info: "4 players, up to 10 spectators",              trending: true,  mutual: false },
-    { name: "Business",        info: "5 players + 1 cashier, up to 10 spectators", trending: false, mutual: true  },
+    { name: "Chess",            info: "2 players, up to 10 spectators",              trending: true,  mutual: false },
+    { name: "Snake and Ladder", info: "8 players, up to 10 spectators",              trending: true,  mutual: true  },
+    { name: "Carrom",           info: "4 players, up to 10 spectators",              trending: false, mutual: true  },
+    { name: "Ludo",             info: "4 players, up to 10 spectators",              trending: true,  mutual: false },
+    { name: "Business",         info: "5 players + 1 cashier, up to 10 spectators", trending: false, mutual: true  },
   ];
 
   const filteredGames = allGames.filter((game) => {
@@ -83,11 +87,12 @@ function Home() {
 
   return (
     <div className="screen">
-      {/* Top bar — now shows ELO + nav buttons */}
+
+      {/* Top bar — shows ELO + nav buttons */}
       <div className="user-bar">
         <span>
           👤 {user.username}
-          {/* Feature 4: show ELO */}
+          {/* Feature 4: show ELO rating next to username */}
           {user.eloRating && (
             <span className="user-elo"> · ⚡{user.eloRating}</span>
           )}
@@ -99,6 +104,7 @@ function Home() {
         </div>
       </div>
 
+      {/* Search — unchanged */}
       <input
         type="text"
         placeholder="Find a game..."
@@ -107,12 +113,14 @@ function Home() {
         onChange={(e) => setSearchTerm(e.target.value)}
       />
 
+      {/* Filter tabs — unchanged */}
       <div className="filter-name">
         <button onClick={() => setFilter("trending")}>Trending</button>
         <button onClick={() => setFilter("mutual")}>Mutual</button>
         <button onClick={() => setFilter("all")}>All</button>
       </div>
 
+      {/* Game cards — unchanged except Chess actions */}
       <div className="games">
         {filteredGames.length > 0 ? (
           filteredGames.map((game, index) => (
@@ -122,16 +130,27 @@ function Home() {
 
               {game.name === "Chess" && (
                 <div className="game-actions">
-                  <button className="create-room-btn" onClick={handleCreateRoom} disabled={creatingRoom}>
+                  <button
+                    className="create-room-btn"
+                    onClick={handleCreateRoom}
+                    disabled={creatingRoom}
+                  >
                     {creatingRoom ? "Creating..." : "♟ Create Room"}
                   </button>
-                  <button className="join-room-btn" onClick={() => navigate("/join")}>
+                  <button
+                    className="join-room-btn"
+                    onClick={() => navigate("/join")}
+                  >
                     🔑 Join with Code
                   </button>
-                  {/* Feature 5: Find Match button */}
-                  <button className="find-match-btn" onClick={() => navigate("/matchmaking")}>
+                  {/* Feature 5: Find Match — uncomment when matchmaking is enabled
+                  <button
+                    className="find-match-btn"
+                    onClick={() => navigate("/matchmaking")}
+                  >
                     ⚔️ Find Match
                   </button>
+                  */}
                 </div>
               )}
             </div>
@@ -153,15 +172,19 @@ function App() {
       <Route path="/auth/callback" element={<OAuthCallback />} />  {/* Feature 3: Google OAuth return */}
 
       {/* Protected */}
-      <Route path="/"              element={<ProtectedRoute><Home /></ProtectedRoute>} />
-      <Route path="/join"          element={<ProtectedRoute><JoinPage /></ProtectedRoute>} />
-      <Route path="/matchmaking"   element={<ProtectedRoute><MatchmakingPage /></ProtectedRoute>} />   {/* Feature 5 */}
-      <Route path="/leaderboard"   element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />   {/* Feature 4 */}
-      <Route path="/friends"       element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />        {/* Friends */}
+      <Route path="/"            element={<ProtectedRoute><Home /></ProtectedRoute>} />
+      <Route path="/join"        element={<ProtectedRoute><JoinPage /></ProtectedRoute>} />
+      <Route path="/leaderboard" element={<ProtectedRoute><LeaderboardPage /></ProtectedRoute>} />  {/* Feature 4 */}
+      <Route path="/friends"     element={<ProtectedRoute><FriendsPage /></ProtectedRoute>} />       {/* Friends */}
 
-      {/* Feature 6: invite link — handles unauthenticated users gracefully */}
+      {/* Feature 5: Matchmaking — uncomment when ready
+      <Route path="/matchmaking" element={<ProtectedRoute><MatchmakingPage /></ProtectedRoute>} />
+      */}
+
+      {/* Feature 6: Invite link — handles unauthenticated users gracefully */}
       <Route path="/chess/:roomId" element={<InviteRoute />} />
 
+      {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
